@@ -10,25 +10,22 @@ import {
   ExternalLink,
   FileText,
   RefreshCw,
-  Send,
 } from "lucide-react";
 
 /**
- * QTMBG — SIGNAL AUDIT (Notebook Edition) v1.0
+ * QTMBG — SIGNAL AUDIT (Notebook Edition) v1.0 (JS)
  * - One coherent visual system (qtmbg notebook)
  * - Sometype Mono for headings + body
  * - No hard gate at intro (email required only for Export/Save)
- * - Strict TS-safe state, Vercel-safe
  */
-
-// -------------------- CONFIG --------------------
-
-type ForceId = "essence" | "identity" | "offer" | "system" | "growth";
 
 const STORAGE_KEY = "qtmbg-signal-audit-notebook-v1";
 
-// Your existing links (kept)
-const KIT_LINKS: Record<ForceId | "mri", string> = {
+// Keep your script URL if you want soft capture
+const GOOGLE_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbzaE2j8Udf13HDx14c7-kJIaqTuSGzJoxRRxgKUH7rjMTE47GpT2G-Fl7NfpDL-q9B_dw/exec";
+
+const KIT_LINKS = {
   essence: "https://www.qtmbg.com/kit#module-1",
   identity: "https://www.qtmbg.com/kit#module-2",
   offer: "https://www.qtmbg.com/kit#module-3",
@@ -37,12 +34,7 @@ const KIT_LINKS: Record<ForceId | "mri", string> = {
   mri: "https://www.qtmbg.com/mri",
 };
 
-// You can keep your script URL if you want capture
-const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbzaE2j8Udf13HDx14c7-kJIaqTuSGzJoxRRxgKUH7rjMTE47GpT2G-Fl7NfpDL-q9B_dw/exec";
-
-// Symptoms (tightened language; still strong but not cringe)
-const SYMPTOMS: Array<{ id: string; label: string; desc: string }> = [
+const SYMPTOMS = [
   {
     id: "price_resistance",
     label: "PRICE RESISTANCE",
@@ -54,7 +46,7 @@ const SYMPTOMS: Array<{ id: string; label: string; desc: string }> = [
   { id: "invisibility", label: "INVISIBILITY", desc: "Work is good, market response is weak." },
 ];
 
-const QUICK_WINS: Record<ForceId, string[]> = {
+const QUICK_WINS = {
   essence: [
     "AUDIT: Remove generic positioning. Replace with one belief you attack.",
     "ACTION: Publish one contrarian claim you can defend (1 post).",
@@ -82,13 +74,7 @@ const QUICK_WINS: Record<ForceId, string[]> = {
   ],
 };
 
-// Force checklist (kept + slightly tightened)
-const PHASES: Array<{
-  id: ForceId;
-  label: string;
-  desc: string;
-  items: Array<{ id: string; label: string }>;
-}> = [
+const PHASES = [
   {
     id: "essence",
     label: "FORCE 1 — ESSENCE",
@@ -151,46 +137,26 @@ const PHASES: Array<{
   },
 ];
 
-// -------------------- UTILS --------------------
-
-function clamp(n: number, min: number, max: number) {
+function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
-function forceName(id: ForceId) {
-  return id.toUpperCase();
-}
-
-function isValidEmail(email: string) {
+function isValidEmail(email) {
   return /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(
     String(email).toLowerCase()
   );
 }
 
-function safeJsonParse<T>(raw: string | null): T | null {
+function safeJsonParse(raw) {
   try {
     if (!raw) return null;
-    return JSON.parse(raw) as T;
+    return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-// -------------------- STATE --------------------
-
-type Step = "INTRO" | "TRIAGE" | "AUDIT" | "PROCESSING" | "REPORT";
-
-type State = {
-  step: Step;
-  symptomId: string | null;
-  phaseIndex: number;
-  client: { name: string; url: string; email: string };
-  checks: Partial<Record<ForceId, Record<string, boolean>>>;
-  createdAtISO: string;
-  submitted: boolean;
-};
-
-function emptyState(): State {
+function emptyState() {
   return {
     step: "INTRO",
     symptomId: null,
@@ -202,12 +168,12 @@ function emptyState(): State {
   };
 }
 
-function loadState(): State | null {
+function loadState() {
   if (typeof window === "undefined") return null;
-  return safeJsonParse<State>(localStorage.getItem(STORAGE_KEY));
+  return safeJsonParse(localStorage.getItem(STORAGE_KEY));
 }
 
-function saveState(s: State) {
+function saveState(s) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   } catch {
@@ -215,9 +181,7 @@ function saveState(s: State) {
   }
 }
 
-// -------------------- UI PRIMITIVES --------------------
-
-function AppShell({ children }: { children: React.ReactNode }) {
+function AppShell({ children }) {
   return (
     <div className="qbg">
       <style>{CSS}</style>
@@ -242,17 +206,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Card({
-  children,
-  title,
-  right,
-  className = "",
-}: {
-  children: React.ReactNode;
-  title?: string;
-  right?: React.ReactNode;
-  className?: string;
-}) {
+function Card({ children, title, right, className = "" }) {
   return (
     <section className={`card ${className}`}>
       {(title || right) && (
@@ -266,19 +220,7 @@ function Card({
   );
 }
 
-function Btn({
-  children,
-  onClick,
-  variant = "primary",
-  disabled,
-  icon,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  variant?: "primary" | "secondary" | "ghost";
-  disabled?: boolean;
-  icon?: React.ReactNode;
-}) {
+function Btn({ children, onClick, variant = "primary", disabled, icon }) {
   return (
     <button
       type="button"
@@ -293,21 +235,7 @@ function Btn({
   );
 }
 
-function MiniInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  hint,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-  hint?: string;
-}) {
+function MiniInput({ label, value, onChange, placeholder, type = "text", hint }) {
   return (
     <div className="field">
       <div className="label">{label}</div>
@@ -324,7 +252,7 @@ function MiniInput({
   );
 }
 
-function Progress({ idx, total }: { idx: number; total: number }) {
+function Progress({ idx, total }) {
   const pct = clamp((idx / total) * 100, 0, 100);
   return (
     <div className="progress">
@@ -333,32 +261,49 @@ function Progress({ idx, total }: { idx: number; total: number }) {
   );
 }
 
-// -------------------- MAIN APP --------------------
+async function submitData(payload) {
+  try {
+    const body = new URLSearchParams({
+      payload: JSON.stringify({
+        app: "QTMBG_SIGNAL_AUDIT_NOTEBOOK_V1",
+        ts: new Date().toISOString(),
+        client: payload.client,
+        symptom: payload.symptomId,
+        score: payload.pct,
+        bottleneck: payload.bottleneck,
+      }),
+    });
+
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default function App() {
   const hydrated = useMemo(() => loadState(), []);
-  const [state, setState] = useState<State>(() => hydrated || emptyState());
+  const [state, setState] = useState(() => hydrated || emptyState());
 
   useEffect(() => {
     saveState(state);
   }, [state]);
 
-  const symptom = useMemo(
-    () => SYMPTOMS.find((s) => s.id === state.symptomId) || null,
-    [state.symptomId]
-  );
+  const symptom = useMemo(() => {
+    return SYMPTOMS.find((s) => s.id === state.symptomId) || null;
+  }, [state.symptomId]);
 
   const scoreData = useMemo(() => {
     let total = 0;
     let earned = 0;
 
-    const breakdown: Record<ForceId, number> = {
-      essence: 0,
-      identity: 0,
-      offer: 0,
-      system: 0,
-      growth: 0,
-    };
+    const breakdown = { essence: 0, identity: 0, offer: 0, system: 0, growth: 0 };
 
     for (const p of PHASES) {
       total += p.items.length;
@@ -369,26 +314,24 @@ export default function App() {
 
     const pct = total === 0 ? 0 : Math.round((earned / total) * 100);
 
-    const sorted = (Object.keys(breakdown) as ForceId[])
+    const sorted = Object.keys(breakdown)
       .map((k) => ({ id: k, val: breakdown[k] }))
       .sort((a, b) => a.val - b.val);
 
-    const bottleneck = sorted[0]?.id ?? "essence";
+    const bottleneck = sorted[0]?.id || "essence";
     return { pct, breakdown, bottleneck };
   }, [state.checks]);
 
   const totalPhases = PHASES.length;
   const phase = PHASES[state.phaseIndex];
 
-  const start = () => {
-    setState((s) => ({ ...s, step: "TRIAGE" }));
-  };
+  const start = () => setState((s) => ({ ...s, step: "TRIAGE" }));
 
-  const chooseSymptom = (id: string) => {
+  const chooseSymptom = (id) => {
     setState((s) => ({ ...s, symptomId: id, step: "AUDIT", phaseIndex: 0 }));
   };
 
-  const toggleCheck = (phaseId: ForceId, itemId: string) => {
+  const toggleCheck = (phaseId, itemId) => {
     setState((s) => {
       const currentPhase = s.checks[phaseId] || {};
       return {
@@ -408,13 +351,10 @@ export default function App() {
       return;
     }
 
-    // Done → processing → report
     setState((s) => ({ ...s, step: "PROCESSING" }));
     window.scrollTo({ top: 0 });
 
-    // Submit only if email is valid (soft capture)
     const hasValidEmail = isValidEmail(state.client.email.trim());
-
     if (hasValidEmail && !state.submitted) {
       void submitData({
         client: state.client,
@@ -426,9 +366,7 @@ export default function App() {
       });
     }
 
-    setTimeout(() => {
-      setState((s) => ({ ...s, step: "REPORT" }));
-    }, 900);
+    setTimeout(() => setState((s) => ({ ...s, step: "REPORT" })), 900);
   };
 
   const goBackPhase = () => {
@@ -443,20 +381,24 @@ export default function App() {
     }
   };
 
+  const openFixLink = () => {
+    window.open(KIT_LINKS[scoreData.bottleneck], "_blank", "noreferrer");
+  };
+
   const copySummary = async () => {
-    const lines: string[] = [];
+    const lines = [];
     lines.push("QTMBG — SIGNAL AUDIT SUMMARY");
     lines.push(`Date: ${new Date(state.createdAtISO).toLocaleString()}`);
     if (state.client.name.trim()) lines.push(`Name: ${state.client.name.trim()}`);
     if (state.client.url.trim()) lines.push(`Website: ${state.client.url.trim()}`);
     if (symptom) lines.push(`Symptom: ${symptom.label}`);
     lines.push(`Overall score: ${scoreData.pct}%`);
-    lines.push(`Bottleneck: ${forceName(scoreData.bottleneck)}`);
+    lines.push(`Bottleneck: ${String(scoreData.bottleneck).toUpperCase()}`);
     lines.push("");
     lines.push("Breakdown:");
-    (Object.keys(scoreData.breakdown) as ForceId[]).forEach((f) => {
-      const max = PHASES.find((p) => p.id === f)!.items.length;
-      lines.push(`- ${forceName(f)}: ${scoreData.breakdown[f]}/${max}`);
+    Object.keys(scoreData.breakdown).forEach((f) => {
+      const max = PHASES.find((p) => p.id === f).items.length;
+      lines.push(`- ${String(f).toUpperCase()}: ${scoreData.breakdown[f]}/${max}`);
     });
     lines.push("");
     lines.push("Next actions (7-day micro-plan):");
@@ -490,7 +432,7 @@ export default function App() {
     const margin = 14;
     const contentW = pageW - margin * 2;
 
-    const drawHeader = (title: string) => {
+    const drawHeader = (title) => {
       doc.setFillColor(255, 255, 255);
       doc.rect(0, 0, 210, 297, "F");
 
@@ -514,9 +456,8 @@ export default function App() {
       doc.line(margin, 48, pageW - margin, 48);
     };
 
-    const symptomLabel = symptom?.label ?? "—";
+    const symptomLabel = symptom?.label || "—";
     const bottleneck = scoreData.bottleneck;
-    const bottleneckLabel = forceName(bottleneck);
 
     // Page 1
     drawHeader("REPORT");
@@ -535,7 +476,7 @@ export default function App() {
 
     doc.setFont("courier", "bold");
     doc.setFontSize(12);
-    doc.text(`Primary bottleneck: ${bottleneckLabel}`, margin, y0 + 58);
+    doc.text(`Primary bottleneck: ${String(bottleneck).toUpperCase()}`, margin, y0 + 58);
 
     doc.setFont("courier", "normal");
     doc.setFontSize(10);
@@ -545,18 +486,19 @@ export default function App() {
     doc.rect(margin, y0 + 66, contentW, 46);
 
     let yy = y0 + 76;
-    (Object.keys(scoreData.breakdown) as ForceId[]).forEach((f) => {
-      const max = PHASES.find((p) => p.id === f)!.items.length;
-      doc.text(`${forceName(f)}: ${scoreData.breakdown[f]}/${max}`, margin + 4, yy);
+    Object.keys(scoreData.breakdown).forEach((f) => {
+      const max = PHASES.find((p) => p.id === f).items.length;
+      doc.text(`${String(f).toUpperCase()}: ${scoreData.breakdown[f]}/${max}`, margin + 4, yy);
       yy += 8;
     });
 
-    // 7-day plan box
+    // Plan box
     doc.setFont("courier", "bold");
     doc.text("7-DAY MICRO-PLAN", margin, y0 + 128);
 
     doc.setFont("courier", "normal");
     doc.rect(margin, y0 + 134, contentW, 56);
+
     let planY = y0 + 144;
     QUICK_WINS[bottleneck].forEach((w) => {
       const lines = doc.splitTextToSize(`- ${w}`, contentW - 8);
@@ -568,20 +510,20 @@ export default function App() {
     doc.setFontSize(8);
     doc.text("QTMBG — internal diagnostic. Use to execute, not to overthink.", margin, 290);
 
-    // Page 2 — Checklist log
+    // Page 2 — Checklist
     doc.addPage();
     drawHeader("CHECKLIST LOG");
     doc.setFont("courier", "normal");
     doc.setFontSize(9);
 
     let y = 60;
-    for (const p of PHASES) {
+    PHASES.forEach((p) => {
       doc.setFont("courier", "bold");
       doc.text(p.label, margin, y);
       y += 8;
 
       doc.setFont("courier", "normal");
-      for (const item of p.items) {
+      p.items.forEach((item) => {
         const checked = !!state.checks[p.id]?.[item.id];
         const prefix = checked ? "[x]" : "[ ]";
         const lines = doc.splitTextToSize(`${prefix} ${item.label}`, contentW);
@@ -595,22 +537,20 @@ export default function App() {
           doc.setFontSize(9);
           y = 60;
         }
-      }
+      });
 
       y += 6;
-    }
+    });
 
-    const file = `QTMBG_SIGNAL_AUDIT_${state.client.name.trim().replace(/\s+/g, "_").toUpperCase()}.pdf`;
+    const file = `QTMBG_SIGNAL_AUDIT_${state.client.name
+      .trim()
+      .replace(/\s+/g, "_")
+      .toUpperCase()}.pdf`;
+
     doc.save(file);
   };
 
-  const openFixLink = () => {
-    const url = KIT_LINKS[scoreData.bottleneck];
-    window.open(url, "_blank", "noreferrer");
-  };
-
-  // -------------------- RENDER --------------------
-
+  // INTRO
   if (state.step === "INTRO") {
     return (
       <AppShell>
@@ -618,8 +558,7 @@ export default function App() {
           <div className="kicker">SIGNAL AUDIT</div>
           <h1 className="h1">Find the structural leak causing your symptom.</h1>
           <p className="sub">
-            This is the deeper instrument (after Signal). You’ll pick a symptom, run the
-            5-force checklist, and get a bottleneck + 7-day plan.
+            Pick a symptom, run the 5-force checklist, and get a bottleneck + 7-day plan.
           </p>
         </div>
 
@@ -657,33 +596,19 @@ export default function App() {
               Reset
             </button>
           </div>
-
-          <div className="trustRow">
-            <div className="trustItem">
-              <CheckCircle2 size={14} />
-              <span>One system, not random tips</span>
-            </div>
-            <div className="trustItem">
-              <CheckCircle2 size={14} />
-              <span>Find bottleneck + fix path</span>
-            </div>
-            <div className="trustItem">
-              <CheckCircle2 size={14} />
-              <span>Exportable plan</span>
-            </div>
-          </div>
         </Card>
       </AppShell>
     );
   }
 
+  // TRIAGE
   if (state.step === "TRIAGE") {
     return (
       <AppShell>
         <div className="hero compact">
           <div className="kicker">STEP 1</div>
           <h1 className="h1 h1Small">Pick your symptom.</h1>
-          <p className="sub">Don’t overthink. Choose the one that costs you money right now.</p>
+          <p className="sub">Don’t overthink. Choose the one costing you money right now.</p>
         </div>
 
         <Card title="Primary symptom">
@@ -700,7 +625,11 @@ export default function App() {
           </div>
 
           <div className="ctaRow">
-            <button className="link" type="button" onClick={() => setState((x) => ({ ...x, step: "INTRO" }))}>
+            <button
+              className="link"
+              type="button"
+              onClick={() => setState((x) => ({ ...x, step: "INTRO" }))}
+            >
               Back
             </button>
           </div>
@@ -709,6 +638,7 @@ export default function App() {
     );
   }
 
+  // AUDIT
   if (state.step === "AUDIT") {
     const progressPct = Math.round(((state.phaseIndex + 1) / totalPhases) * 100);
     return (
@@ -735,7 +665,7 @@ export default function App() {
           title="Checklist"
           right={
             <div className="miniMeta">
-              Symptom: <strong>{symptom?.label ?? "—"}</strong>
+              Symptom: <strong>{symptom?.label || "—"}</strong>
             </div>
           }
         >
@@ -760,7 +690,12 @@ export default function App() {
           </div>
 
           <div className="navRow">
-            <button className="btn ghost" type="button" onClick={goBackPhase} disabled={state.phaseIndex === 0}>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={goBackPhase}
+              disabled={state.phaseIndex === 0}
+            >
               <span className="btnText">Back</span>
               <ArrowRight size={16} />
             </button>
@@ -782,6 +717,7 @@ export default function App() {
     );
   }
 
+  // PROCESSING
   if (state.step === "PROCESSING") {
     return (
       <AppShell>
@@ -797,38 +733,31 @@ export default function App() {
 
   // REPORT
   const bottleneck = scoreData.bottleneck;
-  const bottleneckPlan = QUICK_WINS[bottleneck];
   const isCritical = scoreData.pct < 60;
 
   return (
     <AppShell>
       <div className="hero compact">
         <div className="kicker">REPORT</div>
-        <h1 className="h1 h1Small">Your bottleneck is {forceName(bottleneck)}.</h1>
-        <p className="sub">
-          This is the first force to fix. Everything else gets easier after this.
-        </p>
+        <h1 className="h1 h1Small">Your bottleneck is {String(bottleneck).toUpperCase()}.</h1>
+        <p className="sub">This is the first force to fix. Everything else gets easier after this.</p>
       </div>
 
       <div className="reportGrid">
         <Card
           title="Signal summary"
-          right={
-            <div className={`pillStatus ${isCritical ? "bad" : "good"}`}>
-              {isCritical ? "CRITICAL" : "STABLE"}
-            </div>
-          }
+          right={<div className={`pillStatus ${isCritical ? "bad" : "good"}`}>{isCritical ? "CRITICAL" : "STABLE"}</div>}
         >
           <div className="scoreRow">
             <div className="scoreBig">{scoreData.pct}%</div>
             <div className="scoreMeta">
               <div className="scoreLine">
                 <span>Symptom</span>
-                <strong>{symptom?.label ?? "—"}</strong>
+                <strong>{symptom?.label || "—"}</strong>
               </div>
               <div className="scoreLine">
                 <span>Bottleneck</span>
-                <strong>{forceName(bottleneck)}</strong>
+                <strong>{String(bottleneck).toUpperCase()}</strong>
               </div>
               <div className="scoreLine">
                 <span>Fix link</span>
@@ -837,29 +766,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-          </div>
-
-          <div className="hr" />
-
-          <div className="breakdown">
-            {(Object.keys(scoreData.breakdown) as ForceId[]).map((f) => {
-              const max = PHASES.find((p) => p.id === f)!.items.length;
-              const val = scoreData.breakdown[f];
-              const pct = Math.round((val / max) * 100);
-              const isB = f === bottleneck;
-
-              return (
-                <div key={f} className="barRow">
-                  <div className="barTop">
-                    <div className="barName">{forceName(f)}</div>
-                    <div className={`barTag ${isB ? "tagHard" : ""}`}>{isB ? "BOTTLENECK" : `${val}/${max}`}</div>
-                  </div>
-                  <div className="bar">
-                    <div className="barIn" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
           </div>
 
           <div className="hr" />
@@ -873,14 +779,12 @@ export default function App() {
             </Btn>
           </div>
 
-          <div className="note">
-            Export requires a valid email (to prevent anonymous spam exports and to label the asset).
-          </div>
+          <div className="note">Export requires a valid email (to label the asset).</div>
         </Card>
 
         <Card title="7-day micro-plan">
           <div className="plan">
-            {bottleneckPlan.map((w, i) => (
+            {QUICK_WINS[bottleneck].map((w, i) => (
               <div key={i} className="planItem">
                 <div className="planIdx">{String(i + 1).padStart(2, "0")}</div>
                 <div className="planText">{w}</div>
@@ -916,7 +820,11 @@ export default function App() {
           </Card>
 
           <div className="actionsRow">
-            <Btn variant="secondary" onClick={() => window.open(KIT_LINKS.mri, "_blank", "noreferrer")} icon={<FileText size={16} />}>
+            <Btn
+              variant="secondary"
+              onClick={() => window.open(KIT_LINKS.mri, "_blank", "noreferrer")}
+              icon={<FileText size={16} />}
+            >
               Run MRI
             </Btn>
             <Btn variant="primary" onClick={reset} icon={<RefreshCw size={16} />}>
@@ -925,49 +833,13 @@ export default function App() {
           </div>
 
           <div className="note">
-            This is designed to be consistent with the qtmbg “notebook” system: same page, same boxes,
-            same rhythm — no cheap layout jumps.
+            One system, one grid, one border weight — no cheap jumps between screens.
           </div>
         </Card>
       </div>
     </AppShell>
   );
 }
-
-// -------------------- SUBMIT (soft capture) --------------------
-
-async function submitData(payload: {
-  client: { name: string; url: string; email: string };
-  symptomId: string | null;
-  pct: number;
-  bottleneck: ForceId;
-}) {
-  try {
-    const body = new URLSearchParams({
-      payload: JSON.stringify({
-        app: "QTMBG_SIGNAL_AUDIT_NOTEBOOK_V1",
-        ts: new Date().toISOString(),
-        client: payload.client,
-        symptom: payload.symptomId,
-        score: payload.pct,
-        bottleneck: payload.bottleneck,
-      }),
-    });
-
-    await fetch(GOOGLE_SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    });
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// -------------------- CSS (Notebook System) --------------------
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Sometype+Mono:wght@400;500;600;700&display=swap');
@@ -976,7 +848,6 @@ const CSS = `
   --paper:#ffffff;
   --ink:#0b0b0f;
   --muted: rgba(11,11,15,.62);
-  --line: rgba(11,11,15,.14);
   --line2: rgba(11,11,15,.10);
   --shadow: rgba(0,0,0,.06);
   --red: rgba(200, 52, 52, .38);
@@ -991,24 +862,19 @@ const CSS = `
   position: relative;
 }
 
-/* notebook grid */
 .qbg::before{
   content:"";
   position: fixed;
   inset: 0;
   pointer-events:none;
   background:
-    linear-gradient(to right, transparent 0, transparent 52px, var(--red) 52px, var(--red) 54px, transparent 54px) ,
+    linear-gradient(to right, transparent 0, transparent 52px, var(--red) 52px, var(--red) 54px, transparent 54px),
     linear-gradient(var(--line2) 1px, transparent 1px),
     linear-gradient(90deg, var(--line2) 1px, transparent 1px);
-  background-size:
-    100% 100%,
-    24px 24px,
-    24px 24px;
+  background-size: 100% 100%, 24px 24px, 24px 24px;
   opacity: 1;
 }
 
-/* layout matches your root width style (centered page) */
 .top{
   width: 1126px;
   max-width: 100%;
@@ -1026,11 +892,7 @@ const CSS = `
   z-index: 10;
 }
 
-.brandRow{
-  display:flex;
-  align-items:center;
-  gap: 14px;
-}
+.brandRow{ display:flex; align-items:center; gap: 14px; }
 .brandPill{
   background: var(--ink);
   color: var(--paper);
@@ -1040,16 +902,8 @@ const CSS = `
   text-transform: uppercase;
   line-height: 1;
 }
-.brandTitle{
-  font-size: 16px;
-  letter-spacing: -.02em;
-  font-weight: 600;
-}
-.topMeta{
-  font-size: 12px;
-  color: var(--muted);
-  letter-spacing: .06em;
-}
+.brandTitle{ font-size: 16px; letter-spacing: -.02em; font-weight: 600; }
+.topMeta{ font-size: 12px; color: var(--muted); letter-spacing: .06em; }
 
 .wrap{
   width: 1126px;
@@ -1069,8 +923,8 @@ const CSS = `
   align-items:center;
   gap: 12px;
   color: var(--muted);
-  position: relative;
 }
+
 .footPill{
   border: 2px solid var(--ink);
   padding: 6px 10px;
@@ -1080,9 +934,7 @@ const CSS = `
   color: var(--ink);
   background: rgba(255,255,255,.75);
 }
-.footText{
-  font-size: 12px;
-}
+.footText{ font-size: 12px; }
 
 .hero{
   text-align:center;
@@ -1105,9 +957,7 @@ const CSS = `
   font-weight: 700;
   margin: 0;
 }
-.h1Small{
-  font-size: 40px;
-}
+.h1Small{ font-size: 40px; }
 .sub{
   margin: 12px auto 0;
   color: var(--muted);
@@ -1143,16 +993,9 @@ const CSS = `
   color: var(--muted);
   font-weight: 700;
 }
-.cardRight{ font-size: 12px; color: var(--muted); }
 
-.grid2{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-@media (max-width: 860px){
-  .grid2{ grid-template-columns: 1fr; }
-}
+.grid2{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 860px){ .grid2{ grid-template-columns: 1fr; } }
 
 .field{ text-align:left; }
 .label{
@@ -1171,9 +1014,6 @@ const CSS = `
   font-size: 14px;
   font-family: inherit;
   outline: none;
-}
-.input:focus{
-  box-shadow: 0 0 0 3px rgba(170,59,255,.10);
 }
 .hint{
   font-size: 12px;
@@ -1195,26 +1035,13 @@ const CSS = `
   text-transform: uppercase;
   font-size: 11px;
   font-weight: 700;
-  transition: transform .12s ease, background .12s ease, opacity .12s ease;
+  transition: transform .12s ease, opacity .12s ease;
 }
 .btn:hover{ transform: translateY(-1px); }
-.btn.primary{
-  background: var(--ink);
-  color: var(--paper);
-}
-.btn.secondary{
-  background: var(--paper);
-  color: var(--ink);
-}
-.btn.ghost{
-  background: transparent;
-  opacity: .78;
-}
-.btn.disabled{
-  opacity: .35;
-  cursor:not-allowed;
-  transform:none !important;
-}
+.btn.primary{ background: var(--ink); color: var(--paper); }
+.btn.secondary{ background: var(--paper); color: var(--ink); }
+.btn.ghost{ background: transparent; opacity: .78; }
+.btn.disabled{ opacity: .35; cursor:not-allowed; transform:none !important; }
 .btnText{ letter-spacing: .18em; }
 
 .link{
@@ -1237,30 +1064,13 @@ const CSS = `
   flex-wrap: wrap;
   margin-top: 12px;
 }
-.trustRow{
-  display:flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-top: 14px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.trustItem{
-  display:flex;
-  align-items:center;
-  gap: 8px;
-}
 
-.listGrid{
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-}
+.listGrid{ display:flex; flex-direction:column; gap: 10px; }
 .pick{
   width: 100%;
   border: 2px solid var(--ink);
   background: rgba(255,255,255,.75);
-  padding: 14px 14px;
+  padding: 14px;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -1271,17 +1081,8 @@ const CSS = `
   font-family: inherit;
 }
 .pick:hover{ transform: translateX(3px); }
-.pickLabel{
-  font-size: 14px;
-  letter-spacing: .14em;
-  font-weight: 700;
-}
-.pickDesc{
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
+.pickLabel{ font-size: 14px; letter-spacing: .14em; font-weight: 700; }
+.pickDesc{ margin-top: 4px; font-size: 13px; color: var(--muted); line-height: 1.5; }
 
 .auditHead{
   display:flex;
@@ -1290,17 +1091,8 @@ const CSS = `
   gap: 14px;
   margin: 8px 0 10px;
 }
-.auditTitle{
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -.02em;
-}
-.auditDesc{
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
+.auditTitle{ font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.auditDesc{ margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .chip{
   border: 2px solid var(--ink);
   padding: 10px 12px;
@@ -1321,22 +1113,9 @@ const CSS = `
   overflow:hidden;
   margin: 8px 0 14px;
 }
-.progressIn{
-  height: 100%;
-  background: var(--ink);
-  transition: width .3s ease;
-}
+.progressIn{ height: 100%; background: var(--ink); transition: width .3s ease; }
 
-.miniMeta{
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.checks{
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-}
+.checks{ display:flex; flex-direction:column; gap: 10px; }
 .checkRow{
   border: 2px solid var(--ink);
   background: rgba(255,255,255,.72);
@@ -1344,25 +1123,16 @@ const CSS = `
   grid-template-columns: 28px 1fr auto;
   align-items:center;
   gap: 12px;
-  padding: 12px 12px;
+  padding: 12px;
   cursor:pointer;
   text-align:left;
   font-family: inherit;
-  transition: transform .12s ease, background .12s ease;
+  transition: transform .12s ease;
 }
 .checkRow:hover{ transform: translateX(3px); }
-.checkRow.on{
-  background: rgba(11,11,15,.92);
-  color: var(--paper);
-}
-.checkIcon{ display:flex; align-items:center; justify-content:center; }
+.checkRow.on{ background: rgba(11,11,15,.92); color: var(--paper); }
 .checkText{ font-size: 14px; line-height: 1.5; }
-.checkTag{
-  font-size: 10px;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  opacity: .72;
-}
+.checkTag{ font-size: 10px; letter-spacing: .22em; text-transform: uppercase; opacity: .72; }
 
 .navRow{
   display:flex;
@@ -1397,19 +1167,14 @@ const CSS = `
   animation: spin 1s linear infinite;
 }
 @keyframes spin{ to{ transform: rotate(360deg); } }
-.processingText{
-  color: var(--muted);
-  font-size: 13px;
-}
+.processingText{ color: var(--muted); font-size: 13px; }
 
 .reportGrid{
   display:grid;
   grid-template-columns: 1.1fr .9fr;
   gap: 14px;
 }
-@media (max-width: 980px){
-  .reportGrid{ grid-template-columns: 1fr; }
-}
+@media (max-width: 980px){ .reportGrid{ grid-template-columns: 1fr; } }
 
 .pillStatus{
   border: 2px solid var(--ink);
@@ -1420,12 +1185,8 @@ const CSS = `
   font-weight: 700;
   background: rgba(255,255,255,.75);
 }
-.pillStatus.bad{
-  background: rgba(200,52,52,.12);
-}
-.pillStatus.good{
-  background: rgba(20,150,80,.10);
-}
+.pillStatus.bad{ background: rgba(200,52,52,.12); }
+.pillStatus.good{ background: rgba(20,150,80,.10); }
 
 .scoreRow{
   display:grid;
@@ -1433,9 +1194,7 @@ const CSS = `
   gap: 14px;
   align-items:start;
 }
-@media (max-width: 520px){
-  .scoreRow{ grid-template-columns: 1fr; }
-}
+@media (max-width: 520px){ .scoreRow{ grid-template-columns: 1fr; } }
 
 .scoreBig{
   font-size: 64px;
@@ -1458,6 +1217,7 @@ const CSS = `
 }
 .scoreLine:last-child{ border-bottom: none; }
 .scoreLine span{ color: var(--muted); }
+
 .miniLink{
   border: none;
   background: transparent;
@@ -1471,51 +1231,7 @@ const CSS = `
 }
 .miniLink:hover{ text-decoration: underline; }
 
-.breakdown{
-  display:flex;
-  flex-direction:column;
-  gap: 12px;
-}
-.barRow{ display:flex; flex-direction:column; gap: 8px; }
-.barTop{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 12px;
-}
-.barName{
-  font-size: 12px;
-  letter-spacing: .18em;
-  font-weight: 700;
-}
-.barTag{
-  font-size: 10px;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.barTag.tagHard{
-  color: var(--ink);
-  font-weight: 700;
-}
-.bar{
-  border: 2px solid var(--ink);
-  height: 22px;
-  background: rgba(255,255,255,.65);
-  overflow:hidden;
-}
-.barIn{
-  height: 100%;
-  background: var(--ink);
-  transition: width .4s ease;
-}
-
-.actionsRow{
-  display:flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
+.actionsRow{ display:flex; gap: 10px; flex-wrap: wrap; }
 .note{
   margin-top: 12px;
   color: var(--muted);
@@ -1523,11 +1239,7 @@ const CSS = `
   line-height: 1.6;
 }
 
-.plan{
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-}
+.plan{ display:flex; flex-direction:column; gap: 10px; }
 .planItem{
   border: 2px solid var(--ink);
   background: rgba(255,255,255,.72);
@@ -1546,9 +1258,5 @@ const CSS = `
   justify-content:center;
   font-weight: 700;
 }
-.planText{
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ink);
-}
+.planText{ font-size: 13px; line-height: 1.6; color: var(--ink); }
 `;
