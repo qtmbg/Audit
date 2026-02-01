@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 
 /**
- * QTMBG — DEEP SIGNAL AUDIT (CRA / Vercel-safe JS)
- * Goal: feel like a real hook (depth + insight) + push to book a call.
+ * QTMBG — STRUCTURAL AUDIT (CRA / Vercel-safe JS)
+ * Goal: deep free diagnostic + push to book a call.
  * - 5 Forces
  * - 20 questions (4 per force)
  * - symptom selection -> contextualizes diagnosis
@@ -27,7 +27,7 @@ import {
  * - export: email required only for export/save
  */
 
-const STORAGE_KEY = "qtmbg-audit-deep-v1";
+const STORAGE_KEY = "qtmbg-structural-audit-v1";
 
 /* ---------- 5 FORCES ---------- */
 const FORCES = [
@@ -73,7 +73,7 @@ const SYMPTOMS = [
 ];
 
 /* ---------- DEEP QUESTION BANK (4 per force = 20) ----------
-   Choice values: 1 / 3 / 5  (intentionally — matches your “1/5 3/5 5/5” design)
+   Choice values: 1 / 3 / 5
 */
 const Q = [
   // ESSENCE (4)
@@ -247,9 +247,7 @@ const Q = [
   },
 ];
 
-/* ---------- STRUCTURAL LEAK NARRATIVES ----------
-   These are intentionally “deep” (not a thin summary).
-*/
+/* ---------- STRUCTURAL LEAK NARRATIVES ---------- */
 const LEAKS = {
   essence: {
     name: "MECHANISM BLUR",
@@ -410,7 +408,6 @@ function applySymptomBias(rawScores, symptomId) {
   if (!s) return rawScores;
   const biased = { ...rawScores };
   Object.keys(s.bias).forEach((f) => {
-    // bias shifts low scores slightly lower to reflect symptom reality (without overpowering answers)
     const shift = s.bias[f] * 2; // max 6 points shift
     biased[f] = clamp(biased[f] - shift, 0, 100);
   });
@@ -427,7 +424,7 @@ function AppShell({ children }) {
         <div className="footer">
           <span className="footerTag">QTMBG</span>
           <span className="muted">
-            Signal Audit is a diagnostic. Use it to convert insight into execution.
+            Structural Audit is a diagnostic. Use it to convert insight into execution.
           </span>
         </div>
       </div>
@@ -435,7 +432,7 @@ function AppShell({ children }) {
   );
 }
 
-function TopBar({ title = "Signal Audit", rightText }) {
+function TopBar({ title = "Structural Audit", rightText }) {
   return (
     <div className="topbar">
       <div className="brandRow">
@@ -628,7 +625,6 @@ export default function App() {
       const nextAnswers = { ...p.answers, [qid]: val };
       const nextIdx = p.idx + 1;
 
-      // one checkpoint mid-way to increase perceived depth + reduce drop-off
       if (nextIdx === 10) {
         return { ...p, answers: nextAnswers, idx: nextIdx, view: "checkpoint" };
       }
@@ -647,7 +643,6 @@ export default function App() {
   const toExport = () => setState((p) => ({ ...p, view: "export" }));
 
   const bookCall = () => {
-    // Replace with your booking URL (Calendly / TidyCal / etc.)
     window.location.href = "https://qtmbg.com/book";
   };
 
@@ -662,7 +657,7 @@ export default function App() {
     const leak = LEAKS[b];
     const sorted = diagnosis.sorted || [];
     const lines = [];
-    lines.push("QTMBG — SIGNAL AUDIT (DEEP)");
+    lines.push("QTMBG — STRUCTURAL AUDIT");
     lines.push(`Date: ${new Date(state.createdAtISO).toLocaleString()}`);
     if (state.website) lines.push(`Website: ${state.website}`);
     if (symptomObj) lines.push(`Symptom: ${symptomObj.label} — ${symptomObj.sub}`);
@@ -702,10 +697,10 @@ export default function App() {
   if (state.view === "start") {
     return (
       <AppShell>
-        <TopBar title="Signal Audit" rightText="~6–9 min • 5 forces • bottleneck + fix plan" />
+        <TopBar title="Structural Audit" rightText="~6–9 min • 5 forces • bottleneck + fix plan" />
 
         <div className="hero">
-          <div className="kicker center">SIGNAL AUDIT</div>
+          <div className="kicker center">STRUCTURAL AUDIT</div>
           <div className="h1 center">Find the structural leak causing your symptom.</div>
           <div className="sub center">
             Pick a symptom, run the 5-force checklist, and get a bottleneck + a fix plan you can execute.
@@ -797,7 +792,7 @@ export default function App() {
   if (state.view === "symptom") {
     return (
       <AppShell>
-        <TopBar title="Signal Audit" rightText="step 1/3 • choose symptom" />
+        <TopBar title="Structural Audit" rightText="step 1/3 • choose symptom" />
 
         <div className="hero">
           <div className="kicker center">STEP 1</div>
@@ -818,7 +813,9 @@ export default function App() {
                   className={`choice ${active ? "active" : ""}`}
                   onClick={() => pickSymptom(s.id)}
                 >
-                  <div className="choiceDot">{active ? <CheckCircle2 size={14} /> : <CircleDashed size={14} />}</div>
+                  <div className="choiceDot">
+                    {active ? <CheckCircle2 size={14} /> : <CircleDashed size={14} />}
+                  </div>
                   <div className="choiceBlock">
                     <div className="choiceTitle">{s.label}</div>
                     <div className="tiny muted">{s.sub}</div>
@@ -851,7 +848,7 @@ export default function App() {
     const answered = Object.keys(state.answers).length;
     return (
       <AppShell>
-        <TopBar title="Signal Audit" rightText="checkpoint • depth lock" />
+        <TopBar title="Structural Audit" rightText="checkpoint • depth lock" />
 
         <Card className="aha">
           <div className="ahaIcon">
@@ -893,7 +890,7 @@ export default function App() {
 
     return (
       <AppShell>
-        <TopBar title="Signal Audit" rightText="~6–9 min • 20 questions • deep output" />
+        <TopBar title="Structural Audit" rightText="~6–9 min • 20 questions • deep output" />
 
         <div className="scanHead">
           <div className="scanLeft">
@@ -961,7 +958,7 @@ export default function App() {
   if (state.view === "export") {
     const canSubmit = Boolean(state.email && state.email.includes("@"));
     const submitExport = () => {
-      console.log("AUDIT EXPORT:", {
+      console.log("STRUCTURAL AUDIT EXPORT:", {
         name: state.name,
         email: state.email,
         website: state.website,
@@ -975,7 +972,7 @@ export default function App() {
 
     return (
       <AppShell>
-        <TopBar title="Signal Audit" rightText="export • save" />
+        <TopBar title="Structural Audit" rightText="export • save" />
 
         <div className="hero">
           <div className="kicker center">EXPORT</div>
@@ -1021,12 +1018,7 @@ export default function App() {
           </div>
 
           <div className="ctaRow">
-            <Btn
-              variant="primary"
-              onClick={submitExport}
-              disabled={!canSubmit}
-              icon={<Send size={16} />}
-            >
+            <Btn variant="primary" onClick={submitExport} disabled={!canSubmit} icon={<Send size={16} />}>
               Email me the output
             </Btn>
 
@@ -1065,7 +1057,7 @@ export default function App() {
 
   return (
     <AppShell>
-      <TopBar title="Signal Audit" rightText="results • bottleneck + fix plan" />
+      <TopBar title="Structural Audit" rightText="results • bottleneck + fix plan" />
       <DecayTimer createdAtISO={state.createdAtISO} />
 
       <div className="hero">
@@ -1114,7 +1106,7 @@ export default function App() {
               ))}
             </ul>
 
-            <div className="panelTitle mt">Assets to build (this is the value)</div>
+            <div className="panelTitle mt">Assets to build</div>
             <div className="assetGrid">
               {leak.assets.map((a, i) => (
                 <div key={i} className="asset">
@@ -1219,7 +1211,7 @@ export default function App() {
   );
 }
 
-/* ---------- CSS (matches your Signal style) ---------- */
+/* ---------- CSS (clean white; NO pink tint; matches Signal foundation) ---------- */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Sometype+Mono:wght@400;500;600;700;800&display=swap');
 
@@ -1240,12 +1232,12 @@ const CSS = `
   line-height:1.55;
   display:flex;
   background:var(--bg);
+  /* NOTE: removed the red “margin” line that can read pink on some displays */
   background-image:
     linear-gradient(to bottom, rgba(10,10,10,.06) 1px, transparent 1px),
-    linear-gradient(to right, rgba(10,10,10,.03) 1px, transparent 1px),
-    linear-gradient(to right, rgba(220,38,38,.10) 2px, transparent 2px);
-  background-size:100% 28px, 72px 100%, 1px 100%;
-  background-position:0 0, 0 0, 72px 0;
+    linear-gradient(to right, rgba(10,10,10,.03) 1px, transparent 1px);
+  background-size:100% 28px, 72px 100%;
+  background-position:0 0, 0 0;
 }
 
 .wrap{
@@ -1342,21 +1334,14 @@ const CSS = `
 }
 
 .card.aha{background:var(--paper);}
-.card.symptoms{background:rgba(255,255,255,.88);}
+.card.symptoms{background:var(--paper);}
 
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 @media (max-width:720px){.grid2{grid-template-columns:1fr;}}
 
 .field{margin-bottom:16px;}
 
-.label{
-  font-size:11px;
-  letter-spacing:.2em;
-  text-transform:uppercase;
-  color:rgba(10,10,10,.55);
-  margin-bottom:10px;
-  font-weight:900;
-}
+.label,
 .label2{
   font-size:11px;
   letter-spacing:.2em;
@@ -1426,7 +1411,7 @@ const CSS = `
 .seed{
   border:2px solid rgba(10,10,10,.2);
   padding:12px 14px;
-  background:rgba(255,255,255,.75);
+  background:rgba(255,255,255,.92);
   margin:14px 0 4px;
 }
 .seedTitle{
@@ -1480,7 +1465,7 @@ const CSS = `
 
 .timer{
   display:flex;align-items:center;gap:10px;padding:12px 14px;
-  background:rgba(255,255,255,.92);border:2px solid var(--ink);
+  background:rgba(255,255,255,.96);border:2px solid var(--ink);
   margin-bottom:14px;font-size:12px;color:rgba(10,10,10,.72);
 }
 .timer.expired{background:var(--ink);color:var(--paper);}
@@ -1500,7 +1485,7 @@ const CSS = `
 @media (max-width:900px){.resultGrid{grid-template-columns:1fr;}}
 
 .panel{border:2px solid var(--ink);padding:18px;background:var(--paper);}
-.panel.soft{background:rgba(255,255,255,.88);}
+.panel.soft{background:rgba(255,255,255,.96);}
 
 .panelTitle{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(10,10,10,.62);font-weight:900;margin-bottom:10px;}
 .panelText{font-size:14px;line-height:1.65;color:rgba(10,10,10,.78);}
@@ -1511,7 +1496,7 @@ const CSS = `
 .list li{margin-bottom:8px;}
 
 .assetGrid{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px;}
-.asset{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid rgba(10,10,10,.25);background:rgba(255,255,255,.8);}
+.asset{display:flex;align-items:center;gap:10px;padding:10px 12px;border:2px solid rgba(10,10,10,.25);background:rgba(255,255,255,.96);}
 .assetDot{width:10px;height:10px;border:2px solid var(--ink);display:inline-block;}
 
 .bars{margin-top:14px;display:flex;flex-direction:column;gap:12px;}
@@ -1521,14 +1506,14 @@ const CSS = `
 .tagHard{color:var(--paper);background:var(--ink);padding:4px 8px;border:2px solid var(--ink);}
 .tagWarn{color:var(--ink);background:rgba(10,10,10,.08);padding:4px 8px;border:2px solid rgba(10,10,10,.25);}
 
-.barWrap{position:relative;border:2px solid var(--ink);height:26px;background:rgba(255,255,255,.95);overflow:hidden;}
+.barWrap{position:relative;border:2px solid var(--ink);height:26px;background:rgba(255,255,255,.98);overflow:hidden;}
 .barIn{height:100%;background:var(--ink);transition:width .5s cubic-bezier(.4,0,.2,1);}
 .barPct{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--paper);font-weight:900;mix-blend-mode:difference;}
 
 .commitLadder{display:flex;flex-direction:column;gap:12px;margin:16px 0 10px;}
 .commitStep{
   display:flex;align-items:center;gap:14px;padding:14px;border:2px solid rgba(10,10,10,.35);
-  background:rgba(255,255,255,.92);cursor:pointer;transition:all .18s cubic-bezier(.4,0,.2,1);
+  background:rgba(255,255,255,.96);cursor:pointer;transition:all .18s cubic-bezier(.4,0,.2,1);
   text-align:left;font-family:'Sometype Mono', ui-monospace, monospace;
 }
 .commitStep:hover{transform:translateY(-2px);border-color:var(--ink);}
@@ -1560,4 +1545,3 @@ const CSS = `
   .topmeta{width:100%;text-align:left;}
 }
 `;
-
