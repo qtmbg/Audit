@@ -1,62 +1,74 @@
-'use client';
-
 import React, { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
 import {
   ArrowRight,
   CheckCircle2,
   ChevronRight,
+  CircleDashed,
   Copy,
   Download,
   ExternalLink,
+  FileText,
   RefreshCw,
-  Target,
-  Clock,
-  Zap,
+  Calendar,
   ShieldAlert,
-  Layers,
-  Cpu,
-  Activity,
 } from "lucide-react";
 
 /**
- * QTMBG — SIGNAL AUDIT (DEEP) v2.0
- * Benchmark-driven architecture (Liven-style):
- * 1) Warm Welcome → 2) Pick Symptom → 3) Coordinates (optional; email only for export)
- * 4) Deep Scan (25 Likert items / 5 forces) + Midpoint "Pattern detected"
- * 5) Result that feels "paid" + Book Call CTA + Export
- *
- * DESIGN:
- * - White paper
- * - Notebook grid + margin line
- * - Sometype Mono (head + body)
- *
- * NOTE: Update links below.
+ * QTMBG — DEEP SIGNAL AUDIT (Notebook) v2.0 (TSX)
+ * Goal:
+ * - Benchmark-level freebie depth (Liven-style stepper: fast taps, many steps, real output)
+ * - No email gate to see results (email only for export/save)
+ * - Primary conversion: BOOK CALL
+ * - Accept prefill from Signal via query params
  */
 
 type ForceId = "essence" | "identity" | "offer" | "system" | "growth";
+type StageId = "launch" | "reposition" | "scale";
+type StepKind = "INTRO" | "ORIENT" | "FLOW" | "PROCESSING" | "REPORT";
+
 type SymptomId =
   | "price_resistance"
   | "ghosting"
   | "wrong_fit"
   | "feast_famine"
-  | "invisibility";
+  | "invisibility"
+  | "low_conversion"
+  | "no_demand";
 
-type StageId = "launch" | "reposition" | "scale";
-type Likert = 1 | 2 | 3 | 4 | 5;
+type Scale = 1 | 2 | 3 | 4 | 5;
 
-type View =
-  | "WELCOME"
-  | "SYMPTOM"
-  | "COORDS"
-  | "SCAN"
-  | "MIDPOINT"
-  | "RESULT"
-  | "EXPORT";
+type FlowStep =
+  | { id: "symptom"; kind: "pick"; title: string; sub: string }
+  | { id: "stage"; kind: "pick"; title: string; sub: string }
+  | { id: "revenue"; kind: "pick"; title: string; sub: string }
+  | { id: "channel"; kind: "pick"; title: string; sub: string }
+  | { id: "cta"; kind: "pick"; title: string; sub: string }
+  | {
+      id: string;
+      kind: "scale";
+      force: ForceId;
+      title: string;
+      sub: string;
+      q: string;
+    }
+  | {
+      id: string;
+      kind: "interstitial";
+      force: ForceId;
+      title: string;
+      sub: string;
+    };
 
-const STORAGE_KEY = "qtmbg-signal-audit-deep-v2";
+const STORAGE_KEY = "qtmbg-deep-audit-v2";
 
-// ====== UPDATE THESE LINKS ======
-const CALL_BOOKING_LINK = "https://audit.qtmbg.com/"; // <-- replace with your real booking URL
+/** Optional soft capture endpoint (keep or replace) */
+const GOOGLE_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbzaE2j8Udf13HDx14c7-kJIaqTuSGzJoxRRxgKUH7rjMTE47GpT2G-Fl7NfpDL-q9B_dw/exec";
+
+/** Configure your booking link here */
+const BOOK_CALL_URL = "https://qtmbg.com/booking"; // replace with your real link
+const MRI_URL = "https://www.qtmbg.com/mri";
 const KIT_LINKS: Record<ForceId, string> = {
   essence: "https://www.qtmbg.com/kit#module-1",
   identity: "https://www.qtmbg.com/kit#module-2",
@@ -65,233 +77,238 @@ const KIT_LINKS: Record<ForceId, string> = {
   growth: "https://www.qtmbg.com/kit#module-5",
 };
 
-// ====== META ======
-const FORCES: Array<{
-  id: ForceId;
-  label: string;
-  icon: React.ComponentType<{ size?: number }>;
-  micro: string;
-}> = [
-  { id: "essence", label: "ESSENCE", icon: Zap, micro: "Truth + mechanism + belief" },
-  { id: "identity", label: "IDENTITY", icon: ShieldAlert, micro: "Status + clarity + trust" },
-  { id: "offer", label: "OFFER", icon: Layers, micro: "What people buy + why now" },
-  { id: "system", label: "SYSTEM", icon: Cpu, micro: "Path from attention → cash" },
-  { id: "growth", label: "GROWTH", icon: Activity, micro: "Scaling without chaos" },
+const FORCES: Array<{ id: ForceId; label: string; micro: string }> = [
+  { id: "essence", label: "ESSENCE", micro: "Truth, belief, enemy, mechanism" },
+  { id: "identity", label: "IDENTITY", micro: "Authority, language, coherence" },
+  { id: "offer", label: "OFFER", micro: "Promise, structure, friction, proof" },
+  { id: "system", label: "SYSTEM", micro: "Path, capture, nurture, close" },
+  { id: "growth", label: "GROWTH", micro: "Throughput, leverage, compounding" },
 ];
 
 const STAGES: Array<{ id: StageId; label: string; sub: string }> = [
-  { id: "launch", label: "Launching", sub: "First demand + first offers" },
-  { id: "reposition", label: "Repositioning", sub: "Good work, unclear signal/audience" },
-  { id: "scale", label: "Scaling", sub: "You need throughput, not hustle" },
+  { id: "launch", label: "Launching", sub: "Building first demand + first offers" },
+  { id: "reposition", label: "Repositioning", sub: "Good product, unclear signal or audience" },
+  { id: "scale", label: "Scaling", sub: "You need throughput, not more hustle" },
 ];
 
 const SYMPTOMS: Array<{ id: SymptomId; label: string; desc: string }> = [
-  { id: "price_resistance", label: "PRICE RESISTANCE", desc: "People hesitate, negotiate, or ask “why so expensive?”" },
+  { id: "price_resistance", label: "PRICE RESISTANCE", desc: "People hesitate, negotiate, ask “why so expensive?”" },
   { id: "ghosting", label: "GHOSTING", desc: "Interest → silence. Trust breaks mid-path." },
   { id: "wrong_fit", label: "WRONG FIT", desc: "You attract the wrong buyers and waste time." },
   { id: "feast_famine", label: "FEAST / FAMINE", desc: "Revenue spikes and dips. No control." },
   { id: "invisibility", label: "INVISIBILITY", desc: "Work is good, market response is weak." },
+  { id: "low_conversion", label: "LOW CONVERSION", desc: "Traffic exists, but calls/sales don’t happen." },
+  { id: "no_demand", label: "NO DEMAND", desc: "You post, you try, market doesn’t react." },
 ];
 
-// ====== DEEP SCAN (25 items = 5 per force) ======
-type ScanQ = {
-  id: string;
-  force: ForceId;
-  text: string;
-  hint: string;
+const REVENUE_BANDS = [
+  { id: "pre", label: "Pre-revenue", sub: "Validating offer + signal" },
+  { id: "lt50", label: "< $50k / year", sub: "Early pipeline + positioning" },
+  { id: "50_250", label: "$50k–$250k / year", sub: "Stabilize acquisition + close" },
+  { id: "250_1m", label: "$250k–$1M / year", sub: "Systemize + scale levers" },
+  { id: "gt1m", label: "$1M+ / year", sub: "Compounding, leverage, team" },
+] as const;
+
+const CHANNELS = [
+  { id: "social", label: "Social", sub: "IG / TikTok / X / LinkedIn" },
+  { id: "ads", label: "Paid Ads", sub: "Meta / Google / YouTube" },
+  { id: "seo", label: "SEO", sub: "Search + content moat" },
+  { id: "partners", label: "Partnerships", sub: "Borrow audiences" },
+  { id: "referral", label: "Referrals", sub: "Clients + network" },
+] as const;
+
+const PRIMARY_CTA = [
+  { id: "book", label: "Book calls", sub: "High-ticket / consultative close" },
+  { id: "checkout", label: "Direct checkout", sub: "Productized / ecommerce / paid offer page" },
+  { id: "dm", label: "DM close", sub: "Inbound conversations" },
+  { id: "email", label: "Email nurture", sub: "List → conversion" },
+] as const;
+
+/**
+ * Deep audit questions:
+ * Keep it “fast taps” but many steps (benchmark feel).
+ * 5 forces × 4 questions = 20
+ * + 4–5 triage = ~25
+ * + 1–2 interstitial = ~27
+ */
+const FORCE_QUESTIONS: Record<ForceId, Array<{ id: string; q: string; sub: string }>> = {
+  essence: [
+    { id: "e1", q: "My message attacks a specific status-quo belief.", sub: "Not “tips”. A worldview with an enemy." },
+    { id: "e2", q: "I can explain my transformation in one sentence.", sub: "WHO → OUTCOME → MECHANISM → TIME." },
+    { id: "e3", q: "People feel what I stand for in 10 seconds.", sub: "Bio + hero + first scroll." },
+    { id: "e4", q: "My content creates desire, not just information.", sub: "It makes the buyer want the “after”." },
+  ],
+  identity: [
+    { id: "i1", q: "My website + socials feel like one universe.", sub: "Same tone, same visual authority, same signal." },
+    { id: "i2", q: "My proof stack is visible and specific.", sub: "Numbers, constraints, screenshots, examples." },
+    { id: "i3", q: "I own words competitors don’t use.", sub: "Distinct language = distinct category position." },
+    { id: "i4", q: "My assets look expensive (restraint + focus).", sub: "Not “nice”. Premium." },
+  ],
+  offer: [
+    { id: "o1", q: "My offer is one primary path, not a menu.", sub: "One flagship CTA." },
+    { id: "o2", q: "My promise is measurable and believable.", sub: "Clear outcome + mechanism + boundary." },
+    { id: "o3", q: "The buyer understands price quickly.", sub: "They see value before they see cost." },
+    { id: "o4", q: "Risk is handled (proof / guarantee / constraint).", sub: "They feel safe saying yes." },
+  ],
+  system: [
+    { id: "s1", q: "I have one clear ‘happy path’ from viewer → sale.", sub: "No wandering. No dead ends." },
+    { id: "s2", q: "Capture is clean (lead magnet / audit / form).", sub: "You collect intent properly." },
+    { id: "s3", q: "Nurture exists (email / retargeting / follow-up).", sub: "Interest doesn’t die." },
+    { id: "s4", q: "Sales process is designed, not improvised.", sub: "Filter → frame → close." },
+  ],
+  growth: [
+    { id: "g1", q: "I dominate one channel for 30 days.", sub: "Not mediocre on four." },
+    { id: "g2", q: "I publish one compounding asset weekly.", sub: "A signal asset, not random posting." },
+    { id: "g3", q: "I borrow audiences (partners / podcasts / hosts).", sub: "Distribution leverage." },
+    { id: "g4", q: "Referrals or repeats happen reliably.", sub: "Compounding economics." },
+  ],
 };
 
-const SCAN: ScanQ[] = [
-  // ESSENCE (5)
-  { id: "e1", force: "essence", text: "I have a NAMED mechanism (2–4 words) prospects can repeat.", hint: "If you can’t name it, you don’t own it yet." },
-  { id: "e2", force: "essence", text: "My content attacks a specific status-quo belief (clear enemy).", hint: "Conviction is conversion." },
-  { id: "e3", force: "essence", text: "I can explain my before→after in one sentence (no jargon).", hint: "One sentence should sell the whole system." },
-  { id: "e4", force: "essence", text: "My positioning repels wrong-fit buyers (polarization is intentional).", hint: "If everyone likes it, nobody buys fast." },
-  { id: "e5", force: "essence", text: "I have proof that my mechanism works (examples, numbers, artifacts).", hint: "Proof > promises." },
-
-  // IDENTITY (5)
-  { id: "i1", force: "identity", text: "My website looks premium within 3 seconds on mobile.", hint: "Premium is an instant perception." },
-  { id: "i2", force: "identity", text: "My language is precise (no fluff, no generic claims).", hint: "Generic language = generic pricing." },
-  { id: "i3", force: "identity", text: "My visuals are consistent across touchpoints (site, socials, decks).", hint: "Consistency signals control." },
-  { id: "i4", force: "identity", text: "I have at least 1 strong case study (before/after + specifics).", hint: "A real case study is a selling machine." },
-  { id: "i5", force: "identity", text: "Prospects assume I’m premium before price is mentioned.", hint: "Status removes negotiation." },
-
-  // OFFER (5)
-  { id: "o1", force: "offer", text: "I have ONE flagship next step (obvious CTA, no confusion).", hint: "Choice kills conversion." },
-  { id: "o2", force: "offer", text: "My offer solves one expensive problem with a clear outcome.", hint: "No outcome = no urgency." },
-  { id: "o3", force: "offer", text: "Buyers understand exactly what happens after they pay (process).", hint: "Clarity reduces fear." },
-  { id: "o4", force: "offer", text: "Pricing is anchored to transformation (not hours) and defended by proof.", hint: "Time-based pricing makes you negotiable." },
-  { id: "o5", force: "offer", text: "I have a strong filter or risk reversal that increases trust.", hint: "Constraints create confidence." },
-
-  // SYSTEM (5)
-  { id: "s1", force: "system", text: "I have one primary channel producing leads weekly.", hint: "Random leads = random revenue." },
-  { id: "s2", force: "system", text: "Capture + follow-up is automated (email/DM sequence exists).", hint: "Manual follow-up leaks money." },
-  { id: "s3", force: "system", text: "I use at least one qualification filter to repel bad fits.", hint: "Filtering is how you scale quality." },
-  { id: "s4", force: "system", text: "My pipeline is tracked (even a simple sheet).", hint: "If it’s not tracked, it’s not controlled." },
-  { id: "s5", force: "system", text: "I can state inputs → outputs (viewers→leads→calls→closes).", hint: "Numbers turn hope into engineering." },
-
-  // GROWTH (5)
-  { id: "g1", force: "growth", text: "I track one north-star metric weekly (same day, same time).", hint: "Rhythm creates momentum." },
-  { id: "g2", force: "growth", text: "I have a 90-day focus (one lever) and ignore noise.", hint: "Shiny tactics kill compounding." },
-  { id: "g3", force: "growth", text: "Delivery is productized enough to delegate or scale.", hint: "If it lives in your head, it can’t scale." },
-  { id: "g4", force: "growth", text: "I have a referral trigger and ask at the moment of first win.", hint: "Referrals are a system, not luck." },
-  { id: "g5", force: "growth", text: "Adding budget/people would predictably increase output.", hint: "If not, you’re scaling chaos." },
-];
-
-// ====== STRUCTURAL LEAK PROTOCOLS ======
-type Protocol = {
-  leakName: string;
-  meaning: string;
-  rootCause: string;
-  fix24h: string[];
-  fix7d: string[];
-  fix30d: string[];
-  assets: Array<{ label: string; href: string }>;
-  callPitch: string;
-};
-
-const PROTOCOLS: Record<ForceId, Protocol> = {
+const FORCE_PLANS: Record<
+  ForceId,
+  {
+    leakName: string;
+    whyItHurts: string[];
+    today: string;
+    week: string[];
+    month: string[];
+    callAngle: string;
+  }
+> = {
   essence: {
-    leakName: "BLURRY MECHANISM",
-    meaning:
-      "The work may be good — but the market can’t name what you do. When your mechanism isn’t named, trust stays slow and price stays fragile.",
-    rootCause:
-      "You’re selling capability instead of a repeatable worldview + method. That forces prospects to ‘figure you out’ on calls.",
-    fix24h: [
-      "Write one sentence: WHO → OUTCOME → MECHANISM → TIME.",
-      "Name the mechanism (2–4 words). Put it in hero + bio today.",
-      "Write one contrarian belief you defend (the enemy).",
+    leakName: "ESSENCE LEAK",
+    whyItHurts: [
+      "You blend in because nothing ‘sharp’ is being attacked.",
+      "Your content informs, but doesn’t create desire.",
+      "Buyers can’t repeat your message to others.",
     ],
-    fix7d: [
-      "Publish 3 posts: (1) belief attack, (2) mechanism explanation, (3) proof story.",
-      "Rewrite homepage above-the-fold: Outcome + Mechanism + Proof + One CTA.",
-      "Create one ‘method’ graphic (simple 5-step or 3-step).",
+    today: "Write your one-line thesis: WHO → AFTER → MECHANISM → TIME. Remove jargon.",
+    week: [
+      "Publish 1 contrarian claim you can defend.",
+      "Rewrite bio + hero to sell a belief (not a résumé).",
+      "Build one ‘enemy list’: what you refuse in your category.",
     ],
-    fix30d: [
-      "Turn the mechanism into a productized diagnostic: input → scoring → output plan.",
-      "Build a proof stack: 5 artifacts (screens, numbers, before/after, teardown).",
-      "Refine your ‘repulsion’ language so wrong fits self-exit.",
+    month: [
+      "Create 1 signature signal asset (framework, test, or diagnostic).",
+      "Turn the thesis into a 5-part content series.",
+      "Install a single CTA that matches the belief.",
     ],
-    assets: [
-      { label: "Open Kit — Essence module", href: KIT_LINKS.essence },
-    ],
-    callPitch:
-      "On the call we’ll extract the hidden IP inside your delivery, name it, and turn it into a mechanism buyers repeat for you.",
+    callAngle: "We confirm your thesis + build a precise message system in 30 minutes.",
   },
   identity: {
-    leakName: "STATUS GAP",
-    meaning:
-      "You might be skilled — but your touchpoints don’t look ‘expensive’. That creates hesitation and negotiation.",
-    rootCause:
-      "Your identity is optimized for comfort (‘nice’) instead of authority (‘obvious premium’).",
-    fix24h: [
-      "Remove generic claims. Replace with specifics (outcomes, constraints, numbers).",
-      "Choose 1 signature element (rule system / type / motif) and apply everywhere.",
-      "Add 1 proof block to the homepage (case, screenshots, receipts).",
+    leakName: "IDENTITY LEAK",
+    whyItHurts: [
+      "People don’t trust what looks generic.",
+      "Authority doesn’t carry across touchpoints.",
+      "Proof exists, but is not visible.",
     ],
-    fix7d: [
-      "Upgrade 3 assets: homepage, offer page, one case study.",
-      "Publish 2 authority posts: your model + your standards (filters).",
-      "Tighten your vocabulary: ban weak words (help, passion, tailor-made).",
+    today: "Add a proof block to the first screen: 3 specifics (numbers / constraints / examples).",
+    week: [
+      "Unify website + socials: one grid, one font, one tone.",
+      "Define 3 words you own and remove the rest.",
+      "Replace stock/template visuals with your signature system.",
     ],
-    fix30d: [
-      "Build an authority library: 10 posts that explain your worldview and standards.",
-      "Shoot / produce 15 high-status visual assets (consistent lighting + framing).",
-      "Package 1 case study into multiple formats (post, page, PDF, thread).",
+    month: [
+      "Build a ‘Proof Library’ page or section.",
+      "Produce 5 consistent assets (carousel, video style, offer one-pager).",
+      "Refactor your homepage to feel premium (restraint + focus).",
     ],
-    assets: [
-      { label: "Open Kit — Identity module", href: KIT_LINKS.identity },
-    ],
-    callPitch:
-      "On the call we’ll pinpoint exactly why you don’t look premium yet, and what to change first so price objections collapse.",
+    callAngle: "We turn your current assets into one coherent authority universe.",
   },
   offer: {
-    leakName: "VALUE CONFUSION",
-    meaning:
-      "People like you — but they don’t buy fast. The buyer can’t see the ‘one obvious next step’ with a clean outcome.",
-    rootCause:
-      "Too many options, too much custom, or a promise that isn’t concrete enough to justify urgency.",
-    fix24h: [
-      "Pick ONE flagship and write: who it’s for / what you get / how it works / price.",
-      "Write 3 filters (who it is NOT for). Put them on the offer page.",
-      "Replace feature lists with outcome milestones (Week 1/2/3).",
+    leakName: "OFFER LEAK",
+    whyItHurts: [
+      "Buyers are confused or skeptical: they don’t see the mechanism.",
+      "Price feels arbitrary because value isn’t structured.",
+      "Your CTA is competing with itself.",
     ],
-    fix7d: [
-      "Collapse to 1 path + 1 entry step (if needed).",
-      "Build a simple pricing logic: anchors + proof + constraints.",
-      "Publish 1 teardown showing how your offer creates the after-state.",
+    today: "Collapse to one flagship path + one promise + one CTA.",
+    week: [
+      "Rewrite promise as: Outcome + Mechanism + Boundary.",
+      "Add risk reversal: proof + constraint + clear deliverables.",
+      "Build a simple pricing logic: transformation, not time.",
     ],
-    fix30d: [
-      "Install a consistent sales script: symptom → root cause → plan → close.",
-      "Add one risk reversal or guarantee mechanism you can defend.",
-      "Build one ‘explain-it-like-I’m-5’ offer diagram.",
+    month: [
+      "Create a ‘How it works’ page with a 6-step journey.",
+      "Ship one case-style breakdown (before/after + method).",
+      "Install one checkout or call funnel with zero confusion.",
     ],
-    assets: [
-      { label: "Open Kit — Offer module", href: KIT_LINKS.offer },
-    ],
-    callPitch:
-      "On the call we’ll collapse your offer into one obvious path that buyers choose without negotiation.",
+    callAngle: "We rebuild the offer so price feels obvious and clean.",
   },
   system: {
-    leakName: "PIPELINE FRICTION",
-    meaning:
-      "You’re busy — but revenue isn’t predictable. The path from attention → cash leaks.",
-    rootCause:
-      "No controlled funnel rhythm: capture, follow-up, qualification, and conversion aren’t engineered.",
-    fix24h: [
-      "Write your 6-step happy path: Viewer → Lead → Call → Close → Onboard → Referral.",
-      "Add one capture point + one automated follow-up (even 1 email).",
-      "Add 1 filter question (repel tire-kickers).",
+    leakName: "SYSTEM LEAK",
+    whyItHurts: [
+      "Interest leaks because follow-up doesn’t exist.",
+      "The buyer doesn’t know what happens next.",
+      "Closing depends on your mood, not a designed path.",
     ],
-    fix7d: [
-      "Install a weekly nurture rhythm (proof + CTA).",
-      "Track pipeline stages in a sheet (lead source, stage, next action).",
-      "Define your conversion math (inputs→outputs).",
+    today: "Map the 6-step path: Viewer → Lead → Call → Close → Onboard → Referral.",
+    week: [
+      "Install capture + one nurture email sequence (3 emails).",
+      "Add one filter question to repel wrong fits.",
+      "Standardize your call close script: frame → diagnose → prescribe → commit.",
     ],
-    fix30d: [
-      "Build one channel playbook (content cadence + lead magnet + follow-up).",
-      "Standardize qualification (score / threshold).",
-      "Engineer referrals as a step (not a hope).",
+    month: [
+      "Build a ‘Revenue Router’ board (weekly ritual).",
+      "Set retargeting or reminder loop for non-buyers.",
+      "Add referral ask into onboarding.",
     ],
-    assets: [
-      { label: "Open Kit — System module", href: KIT_LINKS.system },
-    ],
-    callPitch:
-      "On the call we’ll map exactly where your pipeline leaks and give you the smallest fix that creates predictable revenue.",
+    callAngle: "We stop the leaks and install a predictable conversion path.",
   },
   growth: {
-    leakName: "NO NORTH STAR",
-    meaning:
-      "You’re moving — but direction changes weekly. Growth becomes emotional and reactive instead of compounding.",
-    rootCause:
-      "No single metric + no operating rhythm. Without a scoreboard, you chase tactics.",
-    fix24h: [
-      "Pick ONE metric for 30 days (qualified leads/week OR close rate).",
-      "Pick ONE channel to dominate for 30 days (ignore everything else).",
-      "Create a weekly review slot: metric → bottleneck → one fix.",
+    leakName: "GROWTH LEAK",
+    whyItHurts: [
+      "You’re not compounding; you’re restarting weekly.",
+      "Distribution is fragmented.",
+      "Referrals/repeats aren’t engineered.",
     ],
-    fix7d: [
-      "Define a 90-day focus: one lever, one constraint, one output target.",
-      "Add a referral trigger (ask at first win).",
-      "Productize one part of delivery so it’s repeatable.",
+    today: "Pick one channel to dominate for 30 days. Remove the rest temporarily.",
+    week: [
+      "Ship one compounding asset (test, tool, guide, case).",
+      "Borrow an audience: 10 outreach messages to hosts/partners.",
+      "Define one metric to win weekly (qualified leads or close rate).",
     ],
-    fix30d: [
-      "Build a compounding content library (10 assets, same thesis).",
-      "Create one scalable offer ladder step (entry → flagship → ascension).",
-      "Systematize delivery (templates, checklists, operators manual).",
+    month: [
+      "Build a simple referral system (ask + incentive + prompt).",
+      "Create a weekly publishing ritual.",
+      "Turn your best content into a reusable asset ladder.",
     ],
-    assets: [
-      { label: "Open Kit — Growth module", href: KIT_LINKS.growth },
-    ],
-    callPitch:
-      "On the call we’ll choose the one lever you should pull for 90 days and remove everything else.",
+    callAngle: "We choose the leverage channel + design your compounding loop.",
   },
 };
 
-// ====== UTIL ======
+type State = {
+  step: StepKind;
+  flowIndex: number;
+  createdAtISO: string;
+  submitted: boolean;
+
+  // Operator
+  name: string;
+  email: string;
+  website: string;
+
+  // Triage
+  symptomId: SymptomId | null;
+  stage: StageId;
+  revenueBand: typeof REVENUE_BANDS[number]["id"] | null;
+  channel: typeof CHANNELS[number]["id"] | null;
+  primaryCta: typeof PRIMARY_CTA[number]["id"] | null;
+
+  // Answers
+  scale: Record<string, Scale>; // questionId -> 1..5
+};
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
+function isValidEmail(email: string) {
+  return /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(
+    String(email).toLowerCase()
+  );
+}
+
 function safeJsonParse<T>(raw: string | null): T | null {
   try {
     if (!raw) return null;
@@ -300,66 +317,99 @@ function safeJsonParse<T>(raw: string | null): T | null {
     return null;
   }
 }
-function isValidEmail(email: string) {
-  return /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(
-    String(email).toLowerCase()
-  );
+
+function emptyState(): State {
+  return {
+    step: "INTRO",
+    flowIndex: 0,
+    createdAtISO: new Date().toISOString(),
+    submitted: false,
+
+    name: "",
+    email: "",
+    website: "",
+
+    symptomId: null,
+    stage: "launch",
+    revenueBand: null,
+    channel: null,
+    primaryCta: null,
+
+    scale: {},
+  };
 }
-function pctFromLikert(v: Likert) {
-  return v * 20; // 1→20 ... 5→100
-}
-function forceLabel(id: ForceId) {
-  return FORCES.find((f) => f.id === id)?.label ?? id.toUpperCase();
-}
-function symptomLabel(id: SymptomId) {
-  return SYMPTOMS.find((s) => s.id === id)?.label ?? id;
-}
 
-// ====== STATE ======
-type State = {
-  view: View;
-  createdAtISO: string;
-  stage: StageId;
-  symptomId: SymptomId | null;
-
-  // coordinates
-  name: string;
-  email: string;
-  website: string;
-
-  // scan
-  qIndex: number;
-  answers: Record<string, Likert | undefined>; // keyed by SCAN.id
-  midpointShown: boolean;
-};
-
-const DEFAULT_STATE: State = {
-  view: "WELCOME",
-  createdAtISO: new Date().toISOString(),
-  stage: "launch",
-  symptomId: null,
-  name: "",
-  email: "",
-  website: "",
-  qIndex: 0,
-  answers: {},
-  midpointShown: false,
-};
-
-function loadStateSafe(): State | null {
+function loadState(): State | null {
   if (typeof window === "undefined") return null;
-  return safeJsonParse<State>(window.localStorage.getItem(STORAGE_KEY));
+  return safeJsonParse<State>(localStorage.getItem(STORAGE_KEY));
 }
-function saveStateSafe(s: State) {
+
+function saveState(s: State) {
   try {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   } catch {
     // ignore
   }
 }
 
-function AppShell({ children }: { children: React.ReactNode }) {
+function readQueryPrefill(): Partial<State> {
+  if (typeof window === "undefined") return {};
+  const sp = new URLSearchParams(window.location.search);
+
+  const stage = sp.get("stage") as StageId | null;
+  const name = sp.get("name");
+  const email = sp.get("email");
+  const website = sp.get("website");
+  const symptom = sp.get("symptom") as SymptomId | null;
+
+  const out: Partial<State> = {};
+  if (stage && ["launch", "reposition", "scale"].includes(stage)) out.stage = stage;
+  if (name) out.name = name;
+  if (email) out.email = email;
+  if (website) out.website = website;
+  if (symptom) out.symptomId = symptom;
+
+  return out;
+}
+
+async function submitData(payload: {
+  name: string;
+  email: string;
+  website: string;
+  symptomId: SymptomId | null;
+  stage: StageId;
+  bottleneck: ForceId;
+  pct: number;
+}) {
+  try {
+    const body = new URLSearchParams({
+      payload: JSON.stringify({
+        app: "QTMBG_DEEP_AUDIT_V2",
+        ts: new Date().toISOString(),
+        ...payload,
+      }),
+    });
+
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function AppShell({
+  children,
+  rightMeta,
+}: {
+  children: React.ReactNode;
+  rightMeta?: string;
+}) {
   return (
     <div className="qbg">
       <style>{CSS}</style>
@@ -369,16 +419,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <div className="brandPill">QUANTUM BRANDING</div>
           <div className="brandTitle">Signal Audit</div>
         </div>
-        <div className="topMeta">~6–9 min • 25 signals • structural leak + fix plan</div>
+        <div className="topMeta">{rightMeta || "~8–10 min • ~27 steps • bottleneck + execution plan"}</div>
       </header>
 
       <main className="wrap">{children}</main>
 
       <footer className="foot">
-        <div className="footPill">QTMBG</div>
-        <div className="footText">
-          This is a diagnostic — built to create clarity, not trivia.
-        </div>
+        <div className="footPill">QTMbg</div>
+        <div className="footText">Deep free audit. Built to convert insight into execution.</div>
       </footer>
     </div>
   );
@@ -417,7 +465,7 @@ function Btn({
 }: {
   children: React.ReactNode;
   onClick: () => void;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "ghost";
   disabled?: boolean;
   icon?: React.ReactNode;
 }) {
@@ -435,64 +483,7 @@ function Btn({
   );
 }
 
-function LinkBtn({
-  children,
-  onClick,
-  icon,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <button type="button" className="linkBtn" onClick={onClick}>
-      {icon}
-      <span>{children}</span>
-      <ChevronRight size={16} />
-    </button>
-  );
-}
-
-function ProgressBar({ current, total }: { current: number; total: number }) {
-  const pct = clamp((current / total) * 100, 0, 100);
-  return (
-    <div className="progress">
-      <div className="progressIn" style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
-
-function StagePicker({
-  value,
-  onChange,
-}: {
-  value: StageId;
-  onChange: (s: StageId) => void;
-}) {
-  return (
-    <div className="field">
-      <div className="label">YOUR SITUATION *</div>
-      <div className="stageGrid">
-        {STAGES.map((s) => {
-          const active = value === s.id;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={`stage ${active ? "active" : ""}`}
-              onClick={() => onChange(s.id)}
-            >
-              <div className="stageTitle">{s.label}</div>
-              <div className="tiny muted">{s.sub}</div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function Input({
+function MiniInput({
   label,
   value,
   onChange,
@@ -503,7 +494,7 @@ function Input({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
+  placeholder: string;
   type?: string;
   hint?: string;
 }) {
@@ -516,1234 +507,1331 @@ function Input({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         type={type}
-        autoComplete={type === "email" ? "email" : type === "url" ? "url" : "name"}
+        autoComplete="off"
       />
-      {hint ? <div className="hint">{hint}</div> : null}
+      {hint && <div className="hint">{hint}</div>}
     </div>
   );
 }
 
-function LikertRow({
-  value,
-  onPick,
-}: {
-  value?: Likert;
-  onPick: (v: Likert) => void;
-}) {
-  const options: Array<{ v: Likert; label: string }> = [
-    { v: 1, label: "Strongly disagree" },
-    { v: 2, label: "Disagree" },
-    { v: 3, label: "Neutral" },
-    { v: 4, label: "Agree" },
-    { v: 5, label: "Strongly agree" },
+function Progress({ idx, total }: { idx: number; total: number }) {
+  const pct = clamp((idx / total) * 100, 0, 100);
+  return (
+    <div className="progress">
+      <div className="progressIn" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function pillForScore(pct: number) {
+  if (pct < 55) return { label: "CRITICAL", cls: "bad" as const };
+  if (pct < 70) return { label: "WEAK", cls: "mid" as const };
+  return { label: "STABLE", cls: "good" as const };
+}
+
+function formatPct(n: number) {
+  return `${Math.round(n)}%`;
+}
+
+function buildFlow(): FlowStep[] {
+  const steps: FlowStep[] = [
+    { id: "symptom", kind: "pick", title: "Pick the symptom.", sub: "We’ll find the structural leak behind it." },
+    { id: "stage", kind: "pick", title: "Your stage.", sub: "So the plan fits your reality." },
+    { id: "revenue", kind: "pick", title: "Revenue band.", sub: "Benchmarks + sequencing depend on this." },
+    { id: "channel", kind: "pick", title: "Primary channel.", sub: "Where the signal must carry." },
+    { id: "cta", kind: "pick", title: "Primary conversion goal.", sub: "What you want people to do next." },
   ];
 
-  return (
-    <div className="likert">
-      {options.map((o) => {
-        const active = value === o.v;
-        return (
-          <button
-            key={o.v}
-            type="button"
-            className={`likertBtn ${active ? "active" : ""}`}
-            onClick={() => onPick(o.v)}
-          >
-            <div className="likertDot" />
-            <div className="likertLabel">{o.label}</div>
-          </button>
-        );
-      })}
-    </div>
-  );
+  // Force blocks: 4 questions each + interstitial after each force
+  (Object.keys(FORCE_QUESTIONS) as ForceId[]).forEach((force) => {
+    const list = FORCE_QUESTIONS[force];
+    list.forEach((q, i) => {
+      steps.push({
+        id: `${force}_${q.id}`,
+        kind: "scale",
+        force,
+        title: `FORCE — ${FORCES.find((f) => f.id === force)!.label}`,
+        sub: FORCES.find((f) => f.id === force)!.micro,
+        q: q.q,
+      });
+      // sprinkle micro-reassurance like benchmark
+      if (i === 1) {
+        steps.push({
+          id: `${force}_pause_${i}`,
+          kind: "interstitial",
+          force,
+          title: "Quick calibration.",
+          sub: "Answer instinctively. This works because it’s directional and behavioral.",
+        });
+      }
+    });
+  });
+
+  return steps;
 }
 
-// ====== MAIN ======
 export default function App() {
-  const [state, setState] = useState<State>(DEFAULT_STATE);
+  const [state, setState] = useState<State>(() => {
+    const saved = loadState();
+    const base = saved || emptyState();
+    const prefill = readQueryPrefill();
+    return { ...base, ...prefill };
+  });
 
-  useEffect(() => {
-    const loaded = loadStateSafe();
-    if (loaded) setState(loaded);
-  }, []);
+  useEffect(() => saveState(state), [state]);
 
-  useEffect(() => {
-    saveStateSafe(state);
-  }, [state]);
+  const flow = useMemo(() => buildFlow(), []);
+  const totalFlow = flow.length;
 
-  useEffect(() => {
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [state.view]);
+  const symptom = useMemo(
+    () => SYMPTOMS.find((s) => s.id === state.symptomId) || null,
+    [state.symptomId]
+  );
 
-  const totalQ = SCAN.length;
-
-  const scores = useMemo(() => {
-    const byForce: Record<ForceId, number[]> = {
-      essence: [],
-      identity: [],
-      offer: [],
-      system: [],
-      growth: [],
+  const score = useMemo(() => {
+    const perForce: Record<ForceId, { raw: number; max: number; pct: number }> = {
+      essence: { raw: 0, max: 0, pct: 0 },
+      identity: { raw: 0, max: 0, pct: 0 },
+      offer: { raw: 0, max: 0, pct: 0 },
+      system: { raw: 0, max: 0, pct: 0 },
+      growth: { raw: 0, max: 0, pct: 0 },
     };
 
-    for (const q of SCAN) {
-      const v = state.answers[q.id];
-      if (v) byForce[q.force].push(pctFromLikert(v));
-    }
-
-    const avg = (arr: number[]) => (arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0);
-
-    const out: Record<ForceId, number> = {
-      essence: avg(byForce.essence),
-      identity: avg(byForce.identity),
-      offer: avg(byForce.offer),
-      system: avg(byForce.system),
-      growth: avg(byForce.growth),
-    };
-
-    return out;
-  }, [state.answers]);
-
-  const diagnosis = useMemo(() => {
-    const pairs = (Object.keys(scores) as ForceId[]).map((k) => [k, scores[k]] as const);
-    pairs.sort((a, b) => a[1] - b[1]);
-    const primary = pairs[0]?.[0] ?? "essence";
-    const secondary = pairs[1]?.[0] ?? "identity";
-    return { primary, secondary };
-  }, [scores]);
-
-  const answeredCount = useMemo(() => {
-    return SCAN.filter((q) => !!state.answers[q.id]).length;
-  }, [state.answers]);
-
-  const currentQ = SCAN[state.qIndex];
-
-  const restart = () => {
-    try {
-      if (typeof window !== "undefined") window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
-    setState({ ...DEFAULT_STATE, createdAtISO: new Date().toISOString() });
-  };
-
-  const to = (view: View) => setState((p) => ({ ...p, view }));
-
-  const start = () => {
-    setState((p) => ({
-      ...p,
-      createdAtISO: new Date().toISOString(),
-      view: "SYMPTOM",
-      symptomId: null,
-      qIndex: 0,
-      answers: {},
-      midpointShown: false,
-    }));
-  };
-
-  const pickSymptom = (id: SymptomId) => {
-    setState((p) => ({ ...p, symptomId: id, view: "COORDS" }));
-  };
-
-  const beginScan = () => {
-    setState((p) => ({
-      ...p,
-      view: "SCAN",
-      qIndex: 0,
-      answers: p.answers ?? {},
-      midpointShown: false,
-    }));
-  };
-
-  const pickLikert = (qId: string, v: Likert) => {
-    setState((p) => {
-      const nextAnswers = { ...p.answers, [qId]: v };
-      const nextIdx = Math.min(p.qIndex + 1, totalQ - 1);
-
-      // Show midpoint screen once, after ~40% completion (10/25)
-      const shouldMidpoint = !p.midpointShown && Object.keys(nextAnswers).length >= 10;
-
-      if (shouldMidpoint) {
-        return {
-          ...p,
-          answers: nextAnswers,
-          qIndex: nextIdx,
-          view: "MIDPOINT",
-          midpointShown: true,
-        };
-      }
-
-      // If finished last question, go result
-      const isComplete = Object.keys(nextAnswers).length >= totalQ;
-      if (isComplete) {
-        return {
-          ...p,
-          answers: nextAnswers,
-          qIndex: totalQ - 1,
-          view: "RESULT",
-        };
-      }
-
-      return { ...p, answers: nextAnswers, qIndex: nextIdx };
+    (Object.keys(FORCE_QUESTIONS) as ForceId[]).forEach((f) => {
+      FORCE_QUESTIONS[f].forEach((q) => {
+        const key = `${f}_${q.id}`;
+        const v = state.scale[key];
+        perForce[f].max += 5;
+        perForce[f].raw += v ? v : 0;
+      });
+      perForce[f].pct = perForce[f].max ? (perForce[f].raw / perForce[f].max) * 100 : 0;
     });
+
+    const bottleneck = (Object.keys(perForce) as ForceId[]).reduce((worst, f) => {
+      return perForce[f].pct < perForce[worst].pct ? f : worst;
+    }, "essence" as ForceId);
+
+    const overall =
+      (perForce.essence.pct +
+        perForce.identity.pct +
+        perForce.offer.pct +
+        perForce.system.pct +
+        perForce.growth.pct) /
+      5;
+
+    return { perForce, bottleneck, overall };
+  }, [state.scale]);
+
+  const reset = () => {
+    if (confirm("Reset this audit?")) {
+      localStorage.removeItem(STORAGE_KEY);
+      setState({ ...emptyState(), ...readQueryPrefill() });
+    }
   };
+
+  const start = () => setState((s) => ({ ...s, step: "ORIENT" }));
+  const beginFlow = () => setState((s) => ({ ...s, step: "FLOW", flowIndex: 0 }));
 
   const back = () => {
-    setState((p) => ({ ...p, qIndex: Math.max(0, p.qIndex - 1) }));
+    setState((s) => ({ ...s, flowIndex: Math.max(0, s.flowIndex - 1) }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const continueAfterMidpoint = () => setState((p) => ({ ...p, view: "SCAN" }));
+  const next = () => {
+    if (state.flowIndex < totalFlow - 1) {
+      setState((s) => ({ ...s, flowIndex: s.flowIndex + 1 }));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
-  const exportText = useMemo(() => {
-    const primary = diagnosis.primary;
-    const protocol = PROTOCOLS[primary];
-    const s = state.symptomId ? symptomLabel(state.symptomId) : "—";
+    // Done
+    setState((s) => ({ ...s, step: "PROCESSING" }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
 
+    // Soft submit if email is valid (only if they already provided it)
+    const hasValidEmail = isValidEmail(state.email.trim());
+    if (hasValidEmail && !state.submitted) {
+      void submitData({
+        name: state.name.trim(),
+        email: state.email.trim(),
+        website: state.website.trim(),
+        symptomId: state.symptomId,
+        stage: state.stage,
+        bottleneck: score.bottleneck,
+        pct: Math.round(score.overall),
+      }).then((ok) => {
+        if (ok) setState((s) => ({ ...s, submitted: true }));
+      });
+    }
+
+    setTimeout(() => setState((s) => ({ ...s, step: "REPORT" })), 800);
+  };
+
+  const setPick = (id: FlowStep["id"], value: string) => {
+    setState((s) => {
+      if (id === "symptom") return { ...s, symptomId: value as SymptomId, flowIndex: s.flowIndex + 1 };
+      if (id === "stage") return { ...s, stage: value as StageId, flowIndex: s.flowIndex + 1 };
+      if (id === "revenue") return { ...s, revenueBand: value as any, flowIndex: s.flowIndex + 1 };
+      if (id === "channel") return { ...s, channel: value as any, flowIndex: s.flowIndex + 1 };
+      if (id === "cta") return { ...s, primaryCta: value as any, flowIndex: s.flowIndex + 1 };
+      return s;
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const setScale = (qid: string, v: Scale) => {
+    setState((s) => ({
+      ...s,
+      scale: { ...s.scale, [qid]: v },
+      flowIndex: s.flowIndex + 1,
+    }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const requireEmailForExport = () => {
+    if (!state.name.trim()) {
+      alert("Add your name to label the file.");
+      return false;
+    }
+    if (!isValidEmail(state.email.trim())) {
+      alert("Enter a valid email to export/save.");
+      return false;
+    }
+    return true;
+  };
+
+  const copySummary = async () => {
     const lines: string[] = [];
-    lines.push("QTMBG — SIGNAL AUDIT (DEEP)");
-    lines.push(`Date: ${new Date(state.createdAtISO).toISOString()}`);
-    lines.push(`Stage: ${state.stage}`);
-    lines.push(`Symptom: ${s}`);
+    lines.push("QTMBG — DEEP SIGNAL AUDIT SUMMARY");
+    lines.push(`Date: ${new Date(state.createdAtISO).toLocaleString()}`);
+    if (state.name.trim()) lines.push(`Name: ${state.name.trim()}`);
+    if (state.website.trim()) lines.push(`Website: ${state.website.trim()}`);
+    if (symptom) lines.push(`Symptom: ${symptom.label}`);
+    lines.push(`Stage: ${String(state.stage).toUpperCase()}`);
+    lines.push(`Overall score: ${formatPct(score.overall)}`);
+    lines.push(`Primary bottleneck: ${String(score.bottleneck).toUpperCase()}`);
     lines.push("");
-    lines.push(`Primary structural leak: ${protocol.leakName} (${forceLabel(primary)})`);
+    lines.push("Force breakdown:");
+    (Object.keys(score.perForce) as ForceId[]).forEach((f) => {
+      lines.push(`- ${String(f).toUpperCase()}: ${formatPct(score.perForce[f].pct)}`);
+    });
     lines.push("");
-    lines.push("Meaning:");
-    lines.push(protocol.meaning);
+    lines.push("Next plan:");
+    const p = FORCE_PLANS[score.bottleneck];
+    lines.push(`Today: ${p.today}`);
+    lines.push("7 days:");
+    p.week.forEach((w) => lines.push(`- ${w}`));
+    lines.push("30 days:");
+    p.month.forEach((m) => lines.push(`- ${m}`));
     lines.push("");
-    lines.push("Root cause:");
-    lines.push(protocol.rootCause);
-    lines.push("");
-    lines.push("Scores (0–100):");
-    (Object.keys(scores) as ForceId[]).forEach((f) => lines.push(`- ${forceLabel(f)}: ${scores[f]}`));
-    lines.push("");
-    lines.push("24h protocol:");
-    protocol.fix24h.forEach((x) => lines.push(`- ${x}`));
-    lines.push("");
-    lines.push("7-day protocol:");
-    protocol.fix7d.forEach((x) => lines.push(`- ${x}`));
-    lines.push("");
-    lines.push("30-day protocol:");
-    protocol.fix30d.forEach((x) => lines.push(`- ${x}`));
-    lines.push("");
-    lines.push("Assets:");
-    protocol.assets.forEach((a) => lines.push(`- ${a.label}: ${a.href}`));
-    lines.push("");
-    lines.push("Next:");
-    lines.push(protocol.callPitch);
+    lines.push(`Book call: ${BOOK_CALL_URL}`);
 
-    return lines.join("\n");
-  }, [diagnosis.primary, scores, state.createdAtISO, state.stage, state.symptomId]);
-
-  const copyExport = async () => {
     try {
-      await navigator.clipboard.writeText(exportText);
+      await navigator.clipboard.writeText(lines.join("\n"));
       alert("Copied.");
     } catch {
-      alert("Copy failed. You can still download the .txt file.");
+      alert("Copy failed (browser permission).");
     }
   };
 
-  const downloadExport = () => {
-    const blob = new Blob([exportText], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "qtmbg-signal-audit.txt";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  const generatePDF = () => {
+    if (!requireEmailForExport()) return;
+
+    const doc = new jsPDF();
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 14;
+    const contentW = pageW - margin * 2;
+
+    const drawHeader = (title: string) => {
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, pageW, pageH, "F");
+
+      doc.setDrawColor(20, 20, 20);
+      doc.setLineWidth(0.4);
+      doc.rect(margin, 12, contentW, 14);
+
+      doc.setFont("courier", "bold");
+      doc.setFontSize(10);
+      doc.text("QUANTUM BRANDING — DEEP SIGNAL AUDIT", margin + 4, 21);
+
+      doc.setFont("courier", "normal");
+      doc.setFontSize(9);
+      doc.text(new Date().toLocaleDateString(), pageW - margin - 24, 21);
+
+      doc.setFont("courier", "bold");
+      doc.setFontSize(16);
+      doc.text(title, margin, 42);
+
+      doc.setLineWidth(0.3);
+      doc.line(margin, 48, pageW - margin, 48);
+    };
+
+    const bottleneck = score.bottleneck;
+    const plan = FORCE_PLANS[bottleneck];
+    const symptomLabel = symptom?.label || "—";
+
+    // Page 1
+    drawHeader("REPORT");
+
+    doc.setFont("courier", "normal");
+    doc.setFontSize(10);
+
+    let y = 60;
+    doc.text(`Name: ${state.name.trim()}`, margin, y);
+    y += 8;
+    doc.text(`Email: ${state.email.trim()}`, margin, y);
+    y += 8;
+    doc.text(`Website: ${state.website.trim() || "—"}`, margin, y);
+    y += 8;
+    doc.text(`Symptom: ${symptomLabel}`, margin, y);
+    y += 8;
+    doc.text(`Stage: ${String(state.stage).toUpperCase()}`, margin, y);
+    y += 14;
+
+    doc.setFont("courier", "bold");
+    doc.setFontSize(26);
+    doc.text(`${Math.round(score.overall)}%`, margin, y);
+    y += 14;
+
+    doc.setFont("courier", "bold");
+    doc.setFontSize(12);
+    doc.text(`Primary bottleneck: ${String(bottleneck).toUpperCase()}`, margin, y);
+    y += 10;
+
+    doc.setFont("courier", "normal");
+    doc.setFontSize(10);
+
+    // Breakdown box
+    doc.setLineWidth(0.35);
+    doc.rect(margin, y, contentW, 44);
+
+    let by = y + 10;
+    (Object.keys(score.perForce) as ForceId[]).forEach((f) => {
+      doc.text(`${String(f).toUpperCase()}: ${Math.round(score.perForce[f].pct)}%`, margin + 4, by);
+      by += 8;
+    });
+
+    y += 56;
+
+    doc.setFont("courier", "bold");
+    doc.text("WHY THIS HURTS", margin, y);
+    y += 8;
+
+    doc.setFont("courier", "normal");
+    const whyLines = plan.whyItHurts.flatMap((w) => doc.splitTextToSize(`- ${w}`, contentW));
+    doc.text(whyLines, margin, y);
+    y += whyLines.length * 6 + 6;
+
+    doc.setFont("courier", "bold");
+    doc.text("EXECUTION PLAN", margin, y);
+    y += 8;
+
+    doc.setFont("courier", "normal");
+    const todayLines = doc.splitTextToSize(`Today: ${plan.today}`, contentW);
+    doc.text(todayLines, margin, y);
+    y += todayLines.length * 6 + 4;
+
+    doc.setFont("courier", "bold");
+    doc.text("7 DAYS", margin, y);
+    y += 8;
+
+    doc.setFont("courier", "normal");
+    plan.week.forEach((w) => {
+      const lines = doc.splitTextToSize(`- ${w}`, contentW);
+      doc.text(lines, margin, y);
+      y += lines.length * 6 + 2;
+    });
+
+    doc.setFont("courier", "bold");
+    doc.text("30 DAYS", margin, y);
+    y += 8;
+
+    doc.setFont("courier", "normal");
+    plan.month.forEach((m) => {
+      const lines = doc.splitTextToSize(`- ${m}`, contentW);
+      doc.text(lines, margin, y);
+      y += lines.length * 6 + 2;
+    });
+
+    doc.setFont("courier", "bold");
+    doc.text("BOOK A LEAK REVIEW", margin, 280);
+    doc.setFont("courier", "normal");
+    doc.setFontSize(9);
+    doc.text(BOOK_CALL_URL, margin, 287);
+
+    const file = `QTMBG_DEEP_AUDIT_${state.name.trim().replace(/\s+/g, "_").toUpperCase()}.pdf`;
+    doc.save(file);
   };
 
-  // ====== VIEWS ======
-  if (state.view === "WELCOME") {
+  const openFixLink = () => {
+    const url = KIT_LINKS[score.bottleneck];
+    window.open(url, "_blank", "noreferrer");
+  };
+
+  const openCall = () => {
+    window.open(BOOK_CALL_URL, "_blank", "noreferrer");
+  };
+
+  const openMRI = () => {
+    window.open(MRI_URL, "_blank", "noreferrer");
+  };
+
+  // -------------------- VIEWS --------------------
+
+  if (state.step === "INTRO") {
     return (
-      <AppShell>
+      <AppShell rightMeta="~8–10 min • ~27 steps • bottleneck + execution plan">
         <div className="hero">
-          <div className="kicker center">SIGNAL AUDIT</div>
-          <div className="h1 center">Find the structural leak causing your symptom.</div>
-          <div className="sub center">
-            This is designed to feel <b>real</b> — not like a freebie.
+          <div className="kicker">SIGNAL AUDIT</div>
+          <h1 className="h1">Find the structural leak causing your symptom.</h1>
+          <p className="sub">
+            This is a deeper free audit. Fast taps, real output.
             <br />
-            You’ll run a deep scan across 5 forces and leave with a fix protocol.
-          </div>
+            <span className="subStrong">No email required to see results.</span>
+          </p>
         </div>
 
-        <Card title="Before you start">
-          <div className="warm">
-            <div className="warmIcon">
-              <Target size={20} />
-            </div>
-            <div className="warmText">
-              Take this as <b>honest reflection</b>, not performance.
-              <div className="tiny muted" style={{ marginTop: 6 }}>
-                This is a diagnostic. It does not replace a full strategic engagement.
-              </div>
-            </div>
-          </div>
-
-          <StagePicker value={state.stage} onChange={(s) => setState((p) => ({ ...p, stage: s }))} />
-
-          <div className="ctaRow">
-            <Btn onClick={start} icon={<ArrowRight size={16} />}>
-              Start audit
-            </Btn>
-            <button className="link" type="button" onClick={restart}>
-              Reset
-            </button>
-          </div>
-
-          <div className="trust">
-            <div className="trustItem">
-              <CheckCircle2 size={14} />
-              <span>25 signals (satisfying depth)</span>
-            </div>
-            <div className="trustItem">
-              <CheckCircle2 size={14} />
-              <span>Primary structural leak</span>
-            </div>
-            <div className="trustItem">
-              <CheckCircle2 size={14} />
-              <span>24h / 7d / 30d fix protocol</span>
-            </div>
-          </div>
-        </Card>
-      </AppShell>
-    );
-  }
-
-  if (state.view === "SYMPTOM") {
-    return (
-      <AppShell>
-        <div className="hero">
-          <div className="kicker center">STEP 1</div>
-          <div className="h2 center">Pick your symptom.</div>
-          <div className="sub center">We’ll diagnose the leak that causes it.</div>
-        </div>
-
-        <Card title="Symptoms">
-          <div className="grid">
-            {SYMPTOMS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="tile"
-                onClick={() => pickSymptom(s.id)}
-              >
-                <div className="tileTop">
-                  <div className="tileTitle">{s.label}</div>
-                  <ChevronRight size={18} />
-                </div>
-                <div className="tileDesc">{s.desc}</div>
-              </button>
-            ))}
-          </div>
-
-          <div className="ctaRow" style={{ marginTop: 14 }}>
-            <button className="link" type="button" onClick={() => to("WELCOME")}>
-              Back
-            </button>
-          </div>
-        </Card>
-      </AppShell>
-    );
-  }
-
-  if (state.view === "COORDS") {
-    const emailOk = !state.email || isValidEmail(state.email);
-
-    return (
-      <AppShell>
-        <div className="hero">
-          <div className="kicker center">STEP 2</div>
-          <div className="h2 center">Operator coordinates.</div>
-          <div className="sub center">
-            Optional to run the audit.
-            <br />
-            Email is only needed if you want to export/save.
-          </div>
-        </div>
-
-        <Card title="Coordinates (optional)">
+        <Card title="Operator coordinates (optional to start)">
           <div className="grid2">
-            <Input
-              label="NAME (OPTIONAL)"
+            <MiniInput
+              label="Name"
               value={state.name}
-              onChange={(v) => setState((p) => ({ ...p, name: v }))}
+              onChange={(v) => setState((s) => ({ ...s, name: v }))}
               placeholder="Your name"
             />
-            <Input
-              label="EMAIL (REQUIRED FOR EXPORT)"
+            <MiniInput
+              label="Email (required for export)"
               value={state.email}
-              onChange={(v) => setState((p) => ({ ...p, email: v }))}
+              onChange={(v) => setState((s) => ({ ...s, email: v }))}
               placeholder="you@email.com"
               type="email"
-              hint="We only require this when you export / save."
+              hint="Only required if you export / save."
             />
           </div>
 
-          <Input
-            label="WEBSITE (OPTIONAL)"
+          <MiniInput
+            label="Website (optional)"
             value={state.website}
-            onChange={(v) => setState((p) => ({ ...p, website: v }))}
+            onChange={(v) => setState((s) => ({ ...s, website: v }))}
             placeholder="https://yoursite.com"
             type="url"
           />
 
-          {!emailOk ? (
-            <div className="warn">
-              <ShieldAlert size={16} />
-              <span>Please enter a valid email to use export later (or leave it empty).</span>
-            </div>
-          ) : null}
-
-          <div className="ctaRow">
-            <Btn onClick={beginScan} icon={<Clock size={16} />}>
-              Begin deep scan
+          <div className="actionsRow">
+            <Btn variant="primary" onClick={start} icon={<ChevronRight size={16} />}>
+              Start Audit
             </Btn>
-            <button className="link" type="button" onClick={() => to("SYMPTOM")}>
-              Back
-            </button>
+            <Btn variant="secondary" onClick={openCall} icon={<Calendar size={16} />}>
+              Book a 15-min leak review
+            </Btn>
+          </div>
+
+          <div className="note">
+            You can run the audit without giving email. Email only unlocks export.
           </div>
         </Card>
       </AppShell>
     );
   }
 
-  if (state.view === "MIDPOINT") {
-    const sorted = (Object.keys(scores) as ForceId[])
-      .map((f) => [f, scores[f]] as const)
-      .sort((a, b) => a[1] - b[1]);
-    const emerging = sorted[0]?.[0] ?? "essence";
-    const meta = FORCES.find((f) => f.id === emerging)!;
-    const Icon = meta.icon;
-
+  if (state.step === "ORIENT") {
     return (
-      <AppShell>
-        <Card className="mid">
-          <div className="midIcon">
-            <Target size={30} />
-          </div>
-
-          <div className="midTitle">Pattern detected.</div>
-
-          <div className="midText">
-            Early signal points to a leak in <b>{meta.label}</b>.
-          </div>
-
-          <div className="midForce">
-            <Icon size={18} />
-            <div>
-              <div className="midForceName">{meta.label}</div>
-              <div className="tiny muted">{meta.micro}</div>
-            </div>
-          </div>
-
-          <div className="midText small">
-            Keep going — we’re confirming whether this is truly the structural bottleneck.
-          </div>
-
-          <div className="ctaRow" style={{ justifyContent: "center" }}>
-            <Btn onClick={continueAfterMidpoint}>
-              Continue
-            </Btn>
-          </div>
-
-          <div className="tiny muted center" style={{ marginTop: 10 }}>
-            Progress: {answeredCount} / {totalQ}
-          </div>
-        </Card>
-      </AppShell>
-    );
-  }
-
-  if (state.view === "SCAN") {
-    const q = currentQ;
-    const meta = FORCES.find((f) => f.id === q.force)!;
-    const Icon = meta.icon;
-    const value = state.answers[q.id];
-
-    return (
-      <AppShell>
-        <div className="scanTop">
-          <div className="scanLeft">
-            <div className="kicker">
-              {state.qIndex + 1} / {totalQ}
-            </div>
-            <div className="forceLine">
-              <Icon size={18} />
+      <AppShell rightMeta="~8–10 min • ~27 steps • bottleneck + execution plan">
+        <Card title="Before you start" right={<div className="pillMini">READ</div>}>
+          <div className="bullets">
+            <div className="bullet">
+              <CheckCircle2 size={16} />
               <div>
-                <div className="forceName">{meta.label}</div>
-                <div className="tiny muted">{meta.micro}</div>
+                <div className="bTitle">This is a diagnostic, not therapy.</div>
+                <div className="bSub">You’ll get an accurate direction + a real execution plan.</div>
+              </div>
+            </div>
+            <div className="bullet">
+              <CheckCircle2 size={16} />
+              <div>
+                <div className="bTitle">Answer instinctively.</div>
+                <div className="bSub">The audit works because it measures behaviors, not opinions.</div>
+              </div>
+            </div>
+            <div className="bullet">
+              <CheckCircle2 size={16} />
+              <div>
+                <div className="bTitle">No email required for results.</div>
+                <div className="bSub">Email only if you want a PDF export.</div>
               </div>
             </div>
           </div>
-          <div className="scanRight">
-            <button
-              className="link"
-              type="button"
-              onClick={back}
-              disabled={state.qIndex === 0}
-            >
+
+          <div className="actionsRow">
+            <Btn variant="primary" onClick={beginFlow} icon={<ChevronRight size={16} />}>
+              Continue
+            </Btn>
+            <Btn variant="ghost" onClick={() => setState((s) => ({ ...s, step: "INTRO" }))} icon={<RefreshCw size={16} />}>
               Back
-            </button>
-          </div>
-        </div>
-
-        <ProgressBar current={answeredCount} total={totalQ} />
-
-        <Card>
-          <div className="qText">{q.text}</div>
-          <div className="qHint">{q.hint}</div>
-
-          <LikertRow
-            value={value}
-            onPick={(v) => pickLikert(q.id, v)}
-          />
-
-          <div className="tiny muted" style={{ marginTop: 12 }}>
-            Tip: answer based on what your market sees today — not what you intend.
+            </Btn>
           </div>
         </Card>
       </AppShell>
     );
   }
 
-  if (state.view === "EXPORT") {
-    const canExport = !!state.email && isValidEmail(state.email);
+  if (state.step === "FLOW") {
+    const current = flow[state.flowIndex];
+    const stepNum = state.flowIndex + 1;
 
-    return (
-      <AppShell>
-        <div className="hero">
-          <div className="kicker center">EXPORT</div>
-          <div className="h2 center">Save the audit.</div>
-          <div className="sub center">
-            Copy it or download as a .txt file.
-            <br />
-            (Email required only if you want to store/send it later.)
-          </div>
-        </div>
+    const headerRight = (
+      <div className="miniMeta">
+        <span className="muted">Step</span> <strong>{stepNum}</strong>
+        <span className="muted">/</span> <strong>{totalFlow}</strong>
+      </div>
+    );
 
-        <Card title="Export">
-          {!canExport ? (
-            <div className="warn" style={{ marginBottom: 14 }}>
-              <ShieldAlert size={16} />
-              <span>
-                Add a valid email in “Coordinates” if you want this stored/sent later. You can still copy/download now.
-              </span>
+    // interstitial
+    if (current.kind === "interstitial") {
+      const f = current.force;
+      const pct = score.perForce[f].pct || 0;
+      const pill = pillForScore(pct);
+
+      return (
+        <AppShell rightMeta="~8–10 min • ~27 steps • bottleneck + execution plan">
+          <div className="auditHead">
+            <div className="auditHeadLeft">
+              <div className="kicker">CALIBRATION</div>
+              <div className="auditTitle">{current.title}</div>
+              <div className="auditDesc">{current.sub}</div>
             </div>
-          ) : null}
-
-          <div className="exportBox">
-            <pre className="exportPre">{exportText}</pre>
+            <div className="auditHeadRight">
+              <div className={`pillStatus ${pill.cls}`}>{pill.label}</div>
+            </div>
           </div>
 
-          <div className="ctaRow">
-            <Btn onClick={copyExport} icon={<Copy size={16} />}>
-              Copy
-            </Btn>
-            <Btn variant="secondary" onClick={downloadExport} icon={<Download size={16} />}>
-              Download .txt
-            </Btn>
-          </div>
+          <Progress idx={stepNum} total={totalFlow} />
 
-          <div className="ctaRow" style={{ marginTop: 14 }}>
-            <button className="link" type="button" onClick={() => to("RESULT")}>
-              Back to result
+          <Card title="Signal so far" right={headerRight}>
+            <div className="scoreLineBig">
+              <div className="kv">
+                <span className="muted">Force</span>
+                <span className="kvStrong">{FORCES.find((x) => x.id === f)!.label}</span>
+              </div>
+              <div className="kv">
+                <span className="muted">Score</span>
+                <span className="kvStrong">{formatPct(pct)}</span>
+              </div>
+            </div>
+
+            <div className="hr" />
+
+            <div className="note">
+              Keep going. The report will connect the symptom → root leak → plan.
+            </div>
+
+            <div className="navRow">
+              <Btn variant="ghost" onClick={back} icon={<ChevronRight size={16} />}>
+                Back
+              </Btn>
+              <Btn variant="primary" onClick={next} icon={<ChevronRight size={16} />}>
+                Continue
+              </Btn>
+            </div>
+          </Card>
+        </AppShell>
+      );
+    }
+
+    // pick screens
+    if (current.kind === "pick") {
+      const renderPick = () => {
+        if (current.id === "symptom") {
+          return SYMPTOMS.map((s) => (
+            <button key={s.id} className={`pickRow ${state.symptomId === s.id ? "on" : ""}`} type="button" onClick={() => setPick("symptom", s.id)}>
+              <div className="pickTitle">{s.label}</div>
+              <div className="pickSub">{s.desc}</div>
+              <div className="pickTag">{state.symptomId === s.id ? "SELECTED" : "PICK"}</div>
             </button>
+          ));
+        }
+        if (current.id === "stage") {
+          return STAGES.map((st) => (
+            <button key={st.id} className={`pickRow ${state.stage === st.id ? "on" : ""}`} type="button" onClick={() => setPick("stage", st.id)}>
+              <div className="pickTitle">{st.label}</div>
+              <div className="pickSub">{st.sub}</div>
+              <div className="pickTag">{state.stage === st.id ? "SELECTED" : "PICK"}</div>
+            </button>
+          ));
+        }
+        if (current.id === "revenue") {
+          return REVENUE_BANDS.map((b) => (
+            <button key={b.id} className={`pickRow ${state.revenueBand === b.id ? "on" : ""}`} type="button" onClick={() => setPick("revenue", b.id)}>
+              <div className="pickTitle">{b.label}</div>
+              <div className="pickSub">{b.sub}</div>
+              <div className="pickTag">{state.revenueBand === b.id ? "SELECTED" : "PICK"}</div>
+            </button>
+          ));
+        }
+        if (current.id === "channel") {
+          return CHANNELS.map((c) => (
+            <button key={c.id} className={`pickRow ${state.channel === c.id ? "on" : ""}`} type="button" onClick={() => setPick("channel", c.id)}>
+              <div className="pickTitle">{c.label}</div>
+              <div className="pickSub">{c.sub}</div>
+              <div className="pickTag">{state.channel === c.id ? "SELECTED" : "PICK"}</div>
+            </button>
+          ));
+        }
+        if (current.id === "cta") {
+          return PRIMARY_CTA.map((c) => (
+            <button key={c.id} className={`pickRow ${state.primaryCta === c.id ? "on" : ""}`} type="button" onClick={() => setPick("cta", c.id)}>
+              <div className="pickTitle">{c.label}</div>
+              <div className="pickSub">{c.sub}</div>
+              <div className="pickTag">{state.primaryCta === c.id ? "SELECTED" : "PICK"}</div>
+            </button>
+          ));
+        }
+        return null;
+      };
+
+      return (
+        <AppShell rightMeta="~8–10 min • ~27 steps • bottleneck + execution plan">
+          <div className="auditHead">
+            <div className="auditHeadLeft">
+              <div className="kicker">TRIAGE</div>
+              <div className="auditTitle">{current.title}</div>
+              <div className="auditDesc">{current.sub}</div>
+            </div>
+            <div className="auditHeadRight">{headerRight}</div>
+          </div>
+
+          <Progress idx={stepNum} total={totalFlow} />
+
+          <Card title="Pick one" right={<div className="miniMeta">Fast taps • no overthinking</div>}>
+            <div className="picks">{renderPick()}</div>
+
+            <div className="navRow">
+              <button className="btn ghost" type="button" onClick={back} disabled={state.flowIndex === 0}>
+                <span className="btnText">Back</span>
+                <ArrowRight size={16} />
+              </button>
+
+              <button className="btn ghost" type="button" onClick={reset}>
+                <span className="btnText">Abort / Reset</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </Card>
+        </AppShell>
+      );
+    }
+
+    // scale screens
+    if (current.kind === "scale") {
+      const v = state.scale[current.id] || null;
+
+      return (
+        <AppShell rightMeta="~8–10 min • ~27 steps • bottleneck + execution plan">
+          <div className="auditHead">
+            <div className="auditHeadLeft">
+              <div className="kicker">AUDIT • {current.title}</div>
+              <div className="auditTitle">{current.q}</div>
+              <div className="auditDesc">{current.sub}</div>
+            </div>
+            <div className="auditHeadRight">{headerRight}</div>
+          </div>
+
+          <Progress idx={stepNum} total={totalFlow} />
+
+          <Card title="Rate truth level" right={<div className="miniMeta">{FORCES.find((f) => f.id === current.force)!.micro}</div>}>
+            <div className="scale">
+              <button className={`scaleBtn ${v === 1 ? "on" : ""}`} type="button" onClick={() => setScale(current.id, 1)}>
+                1<div className="scaleLab">Not true</div>
+              </button>
+              <button className={`scaleBtn ${v === 2 ? "on" : ""}`} type="button" onClick={() => setScale(current.id, 2)}>
+                2<div className="scaleLab">Rare</div>
+              </button>
+              <button className={`scaleBtn ${v === 3 ? "on" : ""}`} type="button" onClick={() => setScale(current.id, 3)}>
+                3<div className="scaleLab">Mixed</div>
+              </button>
+              <button className={`scaleBtn ${v === 4 ? "on" : ""}`} type="button" onClick={() => setScale(current.id, 4)}>
+                4<div className="scaleLab">Often</div>
+              </button>
+              <button className={`scaleBtn ${v === 5 ? "on" : ""}`} type="button" onClick={() => setScale(current.id, 5)}>
+                5<div className="scaleLab">True</div>
+              </button>
+            </div>
+
+            <div className="note">
+              We measure behaviors because they predict conversion. This is why the result is accurate.
+            </div>
+
+            <div className="navRow">
+              <button className="btn ghost" type="button" onClick={back}>
+                <span className="btnText">Back</span>
+                <ArrowRight size={16} />
+              </button>
+
+              <button className="btn ghost" type="button" onClick={reset}>
+                <span className="btnText">Abort / Reset</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </Card>
+        </AppShell>
+      );
+    }
+  }
+
+  if (state.step === "PROCESSING") {
+    return (
+      <AppShell rightMeta="Compiling dossier…">
+        <Card title="Compiling dossier">
+          <div className="processing">
+            <div className="spinner" />
+            <div className="processingText">Computing bottleneck + execution plan…</div>
           </div>
         </Card>
       </AppShell>
     );
   }
 
-  // RESULT
-  const primary = diagnosis.primary;
-  const secondary = diagnosis.secondary;
-  const protocol = PROTOCOLS[primary];
-  const symptom = state.symptomId ? symptomLabel(state.symptomId) : "—";
+  // REPORT
+  const bottleneck = score.bottleneck;
+  const plan = FORCE_PLANS[bottleneck];
+  const status = pillForScore(score.overall);
 
   return (
-    <AppShell>
-      <div className="hero">
-        <div className="kicker center">YOUR STRUCTURAL LEAK</div>
-        <div className="h1 leak center">{protocol.leakName}</div>
-        <div className="sub center">
-          Symptom: <b>{symptom}</b> → Structural cause: <b>{forceLabel(primary)}</b>
-        </div>
+    <AppShell rightMeta="Report • bottleneck + execution plan + call routing">
+      <div className="hero compact">
+        <div className="kicker">REPORT</div>
+        <h1 className="h1 h1Small">Your bottleneck is {String(bottleneck).toUpperCase()}.</h1>
+        <p className="sub">
+          This is the first force to fix. Everything else gets easier after this.
+        </p>
       </div>
 
-      <Card title="What this means" right={<span className="tiny muted">Primary: {forceLabel(primary)} • Secondary: {forceLabel(secondary)}</span>}>
-        <div className="panelText">{protocol.meaning}</div>
-
-        <div className="panelTitle mt">Root cause</div>
-        <div className="panelText">{protocol.rootCause}</div>
-      </Card>
-
-      <Card title="Fix protocol">
-        <div className="planGrid">
-          <div className="planCol">
-            <div className="planTitle">24 hours</div>
-            <div className="plan">
-              {protocol.fix24h.map((x, i) => (
-                <div key={i} className="planItem">
-                  <div className="planIdx">{i + 1}</div>
-                  <div className="planText">{x}</div>
-                </div>
-              ))}
+      <div className="reportGrid">
+        <Card
+          title="Signal summary"
+          right={<div className={`pillStatus ${status.cls}`}>{status.label}</div>}
+        >
+          <div className="scoreRow">
+            <div className="scoreBig">{Math.round(score.overall)}%</div>
+            <div className="scoreMeta">
+              <div className="scoreLine">
+                <span>Symptom</span>
+                <strong>{symptom?.label || "—"}</strong>
+              </div>
+              <div className="scoreLine">
+                <span>Stage</span>
+                <strong>{String(state.stage).toUpperCase()}</strong>
+              </div>
+              <div className="scoreLine">
+                <span>Bottleneck</span>
+                <strong>{String(bottleneck).toUpperCase()}</strong>
+              </div>
+              <div className="scoreLine">
+                <span>Fix link</span>
+                <button className="miniLink" type="button" onClick={openFixLink}>
+                  Open Kit module <ExternalLink size={14} />
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="planCol">
-            <div className="planTitle">7 days</div>
-            <div className="plan">
-              {protocol.fix7d.map((x, i) => (
-                <div key={i} className="planItem">
-                  <div className="planIdx">{i + 1}</div>
-                  <div className="planText">{x}</div>
-                </div>
+          <div className="hr" />
+
+          <div className="whyBox">
+            <div className="whyTitle">Why this hurts conversion</div>
+            <ul className="whyList">
+              {plan.whyItHurts.map((w, i) => (
+                <li key={i}>{w}</li>
               ))}
+            </ul>
+          </div>
+
+          <div className="hr" />
+
+          <div className="actionsRow">
+            <Btn variant="secondary" onClick={copySummary} icon={<Copy size={16} />}>
+              Copy summary
+            </Btn>
+            <Btn variant="primary" onClick={generatePDF} icon={<Download size={16} />}>
+              Export PDF
+            </Btn>
+          </div>
+
+          <div className="note">Export requires a valid email (to label the asset). Results are free either way.</div>
+        </Card>
+
+        <Card title="Execution plan">
+          <div className="plan">
+            <div className="planItem">
+              <div className="planIdx">01</div>
+              <div className="planText">
+                <div className="planHead">TODAY</div>
+                <div>{plan.today}</div>
+              </div>
+            </div>
+
+            {plan.week.slice(0, 2).map((w, i) => (
+              <div key={i} className="planItem">
+                <div className="planIdx">{String(i + 2).padStart(2, "0")}</div>
+                <div className="planText">
+                  <div className="planHead">7 DAYS</div>
+                  <div>{w}</div>
+                </div>
+              </div>
+            ))}
+
+            <div className="planItem">
+              <div className="planIdx">04</div>
+              <div className="planText">
+                <div className="planHead">30 DAYS</div>
+                <div>{plan.month[0]}</div>
+              </div>
             </div>
           </div>
 
-          <div className="planCol">
-            <div className="planTitle">30 days</div>
-            <div className="plan">
-              {protocol.fix30d.map((x, i) => (
-                <div key={i} className="planItem">
-                  <div className="planIdx">{i + 1}</div>
-                  <div className="planText">{x}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Card>
+          <div className="hr" />
 
-      <Card title="Scores">
+          <Card className="inner" title="Operator coordinates (for export/save)">
+            <div className="grid2">
+              <MiniInput
+                label="Name"
+                value={state.name}
+                onChange={(v) => setState((s) => ({ ...s, name: v }))}
+                placeholder="Your name"
+              />
+              <MiniInput
+                label="Email"
+                value={state.email}
+                onChange={(v) => setState((s) => ({ ...s, email: v }))}
+                placeholder="you@email.com"
+                type="email"
+              />
+            </div>
+            <MiniInput
+              label="Website (optional)"
+              value={state.website}
+              onChange={(v) => setState((s) => ({ ...s, website: v }))}
+              placeholder="https://yoursite.com"
+              type="url"
+            />
+          </Card>
+
+          <div className="actionsRow">
+            <Btn variant="primary" onClick={openCall} icon={<Calendar size={16} />}>
+              Book a 15-min leak review
+            </Btn>
+            <Btn variant="secondary" onClick={openMRI} icon={<FileText size={16} />}>
+              Run MRI
+            </Btn>
+          </div>
+
+          <div className="note">
+            Booking angle: <strong>{plan.callAngle}</strong>
+          </div>
+
+          <div className="hr" />
+
+          <div className="actionsRow">
+            <Btn variant="ghost" onClick={reset} icon={<RefreshCw size={16} />}>
+              New audit
+            </Btn>
+            <Btn variant="ghost" onClick={openFixLink} icon={<ShieldAlert size={16} />}>
+              Fix via Kit module
+            </Btn>
+          </div>
+        </Card>
+      </div>
+
+      <Card title="Force breakdown">
         <div className="bars">
-          {(Object.keys(scores) as ForceId[]).map((f) => {
-            const pct = scores[f];
-            const isPrimary = f === primary;
-            const isSecondary = f === secondary;
-            const tag = isPrimary ? "PRIMARY" : isSecondary ? "SECONDARY" : pct >= 80 ? "STRONG" : pct >= 55 ? "UNSTABLE" : "CRITICAL";
-
+          {(Object.keys(score.perForce) as ForceId[]).map((f) => {
+            const pct = score.perForce[f].pct;
+            const isPrimary = f === bottleneck;
+            const pill = pillForScore(pct);
             return (
-              <div key={f} className="barRow">
-                <div className="barLeft">
-                  <div className="barName">{forceLabel(f)}</div>
-                  <div className={`tag ${isPrimary ? "tagHard" : isSecondary ? "tagWarn" : ""}`}>
-                    {tag}
+              <div className="barRow" key={f}>
+                <div className="barHead">
+                  <div className="barName">{FORCES.find((x) => x.id === f)!.label}</div>
+                  <div className={`tag ${isPrimary ? "tagPrimary" : ""} ${pill.cls}`}>
+                    {isPrimary ? "PRIMARY BOTTLENECK" : pill.label}
                   </div>
                 </div>
-                <div className="barWrap">
-                  <div className="barIn" style={{ width: `${pct}%` }} />
-                  <div className="barPct">{pct}</div>
+                <div className="barTrack">
+                  <div className="barFill" style={{ width: `${pct}%` }} />
+                  <div className="barVal">{Math.round(pct)}</div>
                 </div>
               </div>
             );
           })}
         </div>
       </Card>
-
-      <Card title="Next steps">
-        <div className="panelText">{protocol.callPitch}</div>
-
-        <div className="commit">
-          <LinkBtn
-            onClick={() => window.open(CALL_BOOKING_LINK, "_blank")}
-            icon={<ExternalLink size={16} />}
-          >
-            Book a leak review call
-          </LinkBtn>
-
-          <LinkBtn
-            onClick={() => window.open(KIT_LINKS[primary], "_blank")}
-            icon={<ExternalLink size={16} />}
-          >
-            Open the Kit module for this leak
-          </LinkBtn>
-
-          <LinkBtn onClick={() => to("EXPORT")} icon={<FileIcon />}>
-            Export / Save this audit
-          </LinkBtn>
-        </div>
-
-        <div className="ctaRow" style={{ marginTop: 12 }}>
-          <button className="link" type="button" onClick={restart}>
-            <RefreshCw size={14} style={{ marginRight: 8 }} />
-            New audit
-          </button>
-        </div>
-      </Card>
     </AppShell>
   );
 }
 
-// Small inline icon (so we don't add another lucide import)
-function FileIcon() {
-  return (
-    <span
-      style={{
-        width: 16,
-        height: 16,
-        display: "inline-block",
-        border: "2px solid currentColor",
-        borderTopWidth: 6,
-      }}
-    />
-  );
-}
-
-// ====== CSS ======
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Sometype+Mono:wght@400;500;600;700&display=swap');
 
 :root{
-  --bg: #ffffff;
-  --paper: #ffffff;
-  --ink: #0a0a0a;
-  --muted: rgba(10,10,10,.62);
-  --rule: rgba(10,10,10,.16);
-  --rule2: rgba(10,10,10,.07);
-  --margin: rgba(220, 38, 38, .25);
+  --paper:#ffffff;
+  --ink:#0b0b0f;
+  --muted: rgba(11,11,15,.62);
+  --line2: rgba(11,11,15,.10);
+  --shadow: rgba(0,0,0,.06);
+  --red: rgba(200, 52, 52, .38);
 }
 
-*{margin:0;padding:0;box-sizing:border-box;}
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{ margin:0; }
 
 .qbg{
-  min-height:100vh;
+  min-height: 100svh;
+  background: var(--paper);
   color: var(--ink);
-  font-family: 'Sometype Mono', ui-monospace, monospace;
-  line-height: 1.55;
-  background: var(--bg);
+  font-family: "Sometype Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  position: relative;
+}
 
-  /* notebook grid + left margin line */
-  background-image:
-    linear-gradient(to right, var(--rule2) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--rule2) 1px, transparent 1px),
-    linear-gradient(to right, var(--margin) 2px, transparent 2px);
-  background-size: 52px 52px, 52px 52px, 100% 100%;
-  background-position: 0 0, 0 0, 84px 0;
+.qbg::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  pointer-events:none;
+  background:
+    linear-gradient(to right, transparent 0, transparent 52px, var(--red) 52px, var(--red) 54px, transparent 54px),
+    linear-gradient(var(--line2) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line2) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px, 24px 24px;
+  opacity: 1;
 }
 
 .top{
-  max-width: 1100px;
+  width: 1126px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 18px 20px 14px;
+  padding: 18px 18px 12px;
+  border-bottom: 2px solid var(--ink);
   display:flex;
   align-items:flex-end;
   justify-content:space-between;
   gap: 16px;
-  border-bottom: 2px solid var(--ink);
+  position: sticky;
+  top: 0;
+  background: rgba(255,255,255,.86);
+  backdrop-filter: blur(6px);
+  z-index: 10;
 }
 
-.brandRow{ display:flex; align-items:center; gap: 12px; }
+.brandRow{ display:flex; align-items:center; gap: 14px; }
 .brandPill{
-  border: 2px solid var(--ink);
   background: var(--ink);
-  color: var(--bg);
-  padding: 8px 12px;
-  font-size: 10px;
+  color: var(--paper);
+  padding: 9px 12px;
+  font-size: 11px;
   letter-spacing: .22em;
   text-transform: uppercase;
-  font-weight: 700;
+  line-height: 1;
 }
-.brandTitle{
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: .02em;
-}
-.topMeta{
-  font-size: 12px;
-  color: var(--muted);
-}
+.brandTitle{ font-size: 16px; letter-spacing: -.02em; font-weight: 600; }
+.topMeta{ font-size: 12px; color: var(--muted); letter-spacing: .06em; }
 
 .wrap{
-  max-width: 1100px;
+  width: 1126px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 22px 20px 24px;
+  padding: 18px 18px 32px;
 }
 
 .foot{
-  max-width: 1100px;
+  width: 1126px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 14px 20px 18px;
-  border-top: 2px solid var(--ink);
+  padding: 14px 18px 28px;
   display:flex;
-  gap: 12px;
+  gap: 10px;
   align-items:center;
+  color: var(--muted);
 }
 .footPill{
   border: 2px solid var(--ink);
-  background: var(--ink);
-  color: var(--bg);
   padding: 6px 10px;
   font-size: 10px;
   letter-spacing: .22em;
   text-transform: uppercase;
   font-weight: 700;
+  background: rgba(255,255,255,.75);
 }
-.footText{ font-size: 12px; color: var(--muted); }
+.footText{ font-size: 12px; }
 
-.hero{
-  padding: 18px 0 14px;
-  text-align:center;
-}
-.center{ text-align:center; }
-
+.hero{ padding: 12px 0 14px; }
+.hero.compact{ padding: 6px 0 10px; }
 .kicker{
   font-size: 11px;
-  letter-spacing: .24em;
+  letter-spacing: .22em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 12px;
-  font-weight: 700;
+  margin-bottom: 6px;
 }
 .h1{
-  font-size: clamp(30px, 4.7vw, 60px);
-  line-height: 1.04;
-  letter-spacing: -0.02em;
-  font-weight: 700;
+  font-size: 56px;
+  line-height: 1.03;
+  margin: 0 0 8px;
+  letter-spacing: -.06em;
 }
-.h2{
-  font-size: clamp(24px, 3.4vw, 40px);
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-  font-weight: 700;
-}
-.h1.leak{
-  display:inline-block;
-  padding: 14px 18px;
-  border: 2px solid var(--ink);
-  background: var(--ink);
-  color: var(--bg);
-}
+.h1Small{ font-size: 34px; }
 .sub{
-  margin-top: 12px;
+  margin: 0;
   font-size: 14px;
-  line-height: 1.65;
-  color: rgba(10,10,10,.78);
-  max-width: 820px;
-  margin-left:auto;
-  margin-right:auto;
+  color: var(--muted);
+  line-height: 1.7;
 }
-.sub b{ color: var(--ink); font-weight: 700; }
+.subStrong{ color: var(--ink); font-weight: 700; }
 
 .card{
   border: 2px solid var(--ink);
-  background: rgba(255,255,255,.86);
-  padding: 18px;
-  margin-bottom: 16px;
+  background: rgba(255,255,255,.78);
+  box-shadow: 0 8px 20px rgba(0,0,0,.04);
+  padding: 14px;
+  margin-top: 14px;
 }
 .cardTop{
   display:flex;
-  align-items:flex-start;
   justify-content:space-between;
-  gap: 14px;
-  margin-bottom: 14px;
+  align-items:center;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 .cardTitle{
-  font-size: 11px;
-  letter-spacing: .22em;
+  font-size: 12px;
+  letter-spacing: .18em;
   text-transform: uppercase;
-  color: rgba(10,10,10,.70);
   font-weight: 700;
 }
-.cardRight{ font-size: 12px; color: var(--muted); }
-
-.field{ margin-bottom: 14px; }
-.label{
-  font-size: 11px;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 10px;
-  font-weight: 700;
-}
-.input{
-  width: 100%;
-  border: none;
-  border-bottom: 2px solid var(--ink);
-  background: transparent;
-  padding: 12px 4px;
-  font-size: 14px;
-  outline: none;
-  font-family: 'Sometype Mono', ui-monospace, monospace;
-}
-.input::placeholder{ color: rgba(10,10,10,.35); }
-.hint{ margin-top: 8px; font-size: 12px; color: var(--muted); }
+.cardRight{ color: var(--muted); font-size: 12px; }
 
 .grid2{
   display:grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
 }
-@media(max-width: 820px){
-  .grid2{ grid-template-columns: 1fr; }
-}
+@media (max-width: 760px){ .grid2{ grid-template-columns: 1fr; } }
 
-.stageGrid{ display:grid; gap: 12px; }
-.stage{
+.field{ margin-bottom: 12px; }
+.label{
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.input{
+  width: 100%;
   border: 2px solid var(--ink);
-  padding: 16px;
-  background: rgba(255,255,255,.92);
-  text-align:left;
-  cursor:pointer;
-  transition: transform .18s cubic-bezier(.4,0,.2,1);
-  font-family: 'Sometype Mono', ui-monospace, monospace;
+  background: rgba(255,255,255,.76);
+  padding: 12px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
 }
-.stage:hover{ transform: translateY(-2px); }
-.stage.active{
-  background: var(--ink);
-  color: var(--bg);
-}
-.stageTitle{ font-weight: 700; font-size: 16px; }
-.tiny{ font-size: 12px; line-height: 1.4; }
-.small{ font-size: 13px; line-height: 1.6; }
-.muted{ color: var(--muted); }
+.input:focus{ box-shadow: 0 0 0 3px rgba(11,11,15,.10); }
+.hint{ font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
 
+.actionsRow{ display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .btn{
   border: 2px solid var(--ink);
-  padding: 14px 18px;
+  padding: 12px 12px;
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
   display:inline-flex;
   align-items:center;
-  gap: 12px;
-  cursor:pointer;
-  transition: transform .18s cubic-bezier(.4,0,.2,1);
-  text-transform: uppercase;
-  letter-spacing: .18em;
-  font-size: 11px;
+  gap: 10px;
+  font-family: inherit;
   font-weight: 700;
-  font-family: 'Sometype Mono', ui-monospace, monospace;
 }
-.btn.primary{ background: var(--ink); color: var(--bg); }
-.btn.secondary{ background: rgba(255,255,255,.92); color: var(--ink); }
-.btn:hover{ transform: translateY(-2px); }
-.btn.disabled{ opacity: .35; cursor:not-allowed; transform:none; }
-.btnText{ transform: translateY(0.5px); }
+.btn.secondary{ background: rgba(255,255,255,.78); color: var(--ink); }
+.btn.ghost{ background: transparent; color: var(--ink); }
+.btn.disabled{ opacity: .5; cursor: not-allowed; }
+.btnText{ font-size: 14px; }
 
-.link{
-  background: transparent;
-  border: none;
-  padding: 0;
+.note{
+  margin-top: 12px;
   color: var(--muted);
-  text-decoration: underline;
-  cursor: pointer;
-  font-family: 'Sometype Mono', ui-monospace, monospace;
   font-size: 12px;
+  line-height: 1.6;
 }
-.link:disabled{ opacity:.4; cursor:not-allowed; }
 
-.ctaRow{
+.bullets{ display:flex; flex-direction:column; gap: 12px; }
+.bullet{ display:flex; gap: 10px; align-items:flex-start; }
+.bTitle{ font-weight: 800; }
+.bSub{ color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+.auditHead{
   display:flex;
-  align-items:center;
   justify-content:space-between;
-  gap: 14px;
-  flex-wrap:wrap;
-}
-
-.trust{
-  display:flex;
-  gap: 18px;
-  margin-top: 14px;
-  flex-wrap:wrap;
-}
-.trustItem{
-  display:flex;
-  align-items:center;
-  gap: 8px;
-  font-size: 12px;
-  color: rgba(10,10,10,.75);
-}
-
-.grid{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
+  align-items:flex-start;
   gap: 12px;
-}
-@media(max-width: 820px){
-  .grid{ grid-template-columns: 1fr; }
-}
-.tile{
-  border: 2px solid var(--ink);
-  background: rgba(255,255,255,.92);
-  padding: 14px;
-  cursor:pointer;
-  text-align:left;
-  transition: transform .18s cubic-bezier(.4,0,.2,1);
-  font-family: 'Sometype Mono', ui-monospace, monospace;
-}
-.tile:hover{ transform: translateY(-2px); }
-.tileTop{ display:flex; align-items:center; justify-content:space-between; gap: 12px; }
-.tileTitle{ font-weight: 700; letter-spacing: .06em; }
-.tileDesc{ margin-top: 8px; font-size: 13px; color: rgba(10,10,10,.72); line-height: 1.55; }
-
-.warm{
-  display:flex;
-  gap: 12px;
-  align-items:flex-start;
-  border: 2px solid rgba(10,10,10,.35);
-  background: rgba(255,255,255,.72);
-  padding: 12px;
-  margin-bottom: 14px;
-}
-.warmIcon{
-  width: 40px;
-  height: 40px;
-  border: 2px solid var(--ink);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  flex-shrink:0;
-}
-.warmText{ font-size: 13px; line-height: 1.6; color: rgba(10,10,10,.78); }
-
-.warn{
-  display:flex;
-  align-items:flex-start;
-  gap: 10px;
-  border: 2px solid rgba(10,10,10,.35);
-  background: rgba(255,255,255,.76);
-  padding: 12px;
-  font-size: 12px;
-  color: rgba(10,10,10,.75);
-}
-
-.scanTop{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap: 14px;
-  margin-bottom: 10px;
-}
-.forceLine{
-  display:flex;
-  gap: 12px;
-  align-items:flex-start;
-}
-.forceName{
-  font-weight: 700;
-  letter-spacing: .14em;
-  font-size: 14px;
-}
-
-.progress{
-  width:100%;
-  height: 3px;
-  background: rgba(10,10,10,.18);
-  overflow:hidden;
-  margin-bottom: 16px;
-}
-.progressIn{
-  height: 3px;
-  background: var(--ink);
-  transition: width .25s cubic-bezier(.4,0,.2,1);
-}
-
-.qText{
-  font-size: 22px;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-  font-weight: 700;
-  margin-bottom: 10px;
-}
-.qHint{
-  font-size: 13px;
-  color: rgba(10,10,10,.66);
-  line-height: 1.55;
-  margin-bottom: 14px;
-  border-left: 2px solid rgba(10,10,10,.35);
-  padding-left: 12px;
-}
-
-.likert{
-  display:grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
   margin-top: 6px;
 }
-.likertBtn{
-  width:100%;
+.auditTitle{ font-size: 26px; font-weight: 800; letter-spacing: -.03em; line-height: 1.15; }
+.auditDesc{ color: var(--muted); font-size: 13px; line-height: 1.6; margin-top: 6px; }
+
+.miniMeta{ font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+.miniMeta strong{ color: var(--ink); }
+
+.progress{
   border: 2px solid var(--ink);
-  background: rgba(255,255,255,.92);
-  padding: 12px;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  gap: 12px;
-  text-align:left;
-  font-family: 'Sometype Mono', ui-monospace, monospace;
-  transition: transform .18s cubic-bezier(.4,0,.2,1);
+  height: 10px;
+  background: rgba(255,255,255,.7);
+  margin-top: 10px;
+  overflow:hidden;
 }
-.likertBtn:hover{ transform: translateY(-2px); }
-.likertBtn.active{
+.progressIn{
+  height: 100%;
   background: var(--ink);
-  color: var(--bg);
+  width: 0%;
 }
-.likertDot{
-  width: 14px;
-  height: 14px;
-  border: 2px solid currentColor;
-}
-.likertLabel{ font-size: 13px; }
 
-.mid{
-  text-align:center;
-  padding: 22px;
-}
-.midIcon{
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 14px;
+.picks{ display:flex; flex-direction:column; gap: 10px; }
+.pickRow{
   border: 2px solid var(--ink);
+  background: rgba(255,255,255,.72);
+  padding: 12px;
+  text-align:left;
+  cursor: pointer;
+  display:grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items:start;
+}
+.pickRow.on{ background: rgba(11,11,15,.06); }
+.pickTitle{ font-weight: 800; letter-spacing: -.01em; }
+.pickSub{ color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.5; grid-column: 1 / 2; }
+.pickTag{
+  border: 2px solid var(--ink);
+  padding: 6px 10px;
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  font-weight: 800;
+  background: rgba(255,255,255,.75);
+}
+
+.navRow{
+  display:flex;
+  justify-content:space-between;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.scale{
+  display:grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+@media (max-width: 760px){
+  .scale{ grid-template-columns: 1fr; }
+}
+.scaleBtn{
+  border: 2px solid var(--ink);
+  background: rgba(255,255,255,.76);
+  padding: 14px 12px;
+  cursor: pointer;
+  text-align:center;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 16px;
+}
+.scaleBtn.on{ background: rgba(11,11,15,.08); }
+.scaleLab{ font-size: 12px; color: var(--muted); font-weight: 700; margin-top: 6px; }
+
+.processing{
   display:flex;
   align-items:center;
-  justify-content:center;
-}
-.midTitle{ font-size: 28px; font-weight: 800; margin-bottom: 10px; }
-.midText{ font-size: 14px; color: rgba(10,10,10,.78); line-height: 1.65; }
-.midForce{
-  display:inline-flex;
   gap: 12px;
-  align-items:center;
-  padding: 12px 14px;
+  padding: 18px 0;
+}
+.spinner{
+  width: 34px;
+  height: 34px;
   border: 2px solid var(--ink);
-  background: rgba(255,255,255,.92);
-  margin: 14px 0 12px;
+  border-top-color: transparent;
+  border-radius: 999px;
+  animation: spin 1s linear infinite;
 }
-.midForceName{ font-weight: 800; letter-spacing: .12em; }
+@keyframes spin{ to{ transform: rotate(360deg); } }
+.processingText{ color: var(--muted); font-size: 13px; }
 
-.panelTitle{
-  font-size: 11px;
-  letter-spacing: .22em;
-  text-transform: uppercase;
-  color: rgba(10,10,10,.65);
-  font-weight: 800;
-  margin-bottom: 10px;
-}
-.panelText{
-  font-size: 13px;
-  line-height: 1.65;
-  color: rgba(10,10,10,.78);
-}
-.mt{ margin-top: 16px; }
-
-.planGrid{
+.reportGrid{
   display:grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+  grid-template-columns: 1.08fr .92fr;
+  gap: 14px;
 }
-@media(min-width: 980px){
-  .planGrid{ grid-template-columns: 1fr 1fr 1fr; }
-}
-.planTitle{
-  font-size: 11px;
+@media (max-width: 980px){ .reportGrid{ grid-template-columns: 1fr; } }
+
+.pillStatus{
+  border: 2px solid var(--ink);
+  padding: 6px 10px;
+  font-size: 10px;
   letter-spacing: .22em;
   text-transform: uppercase;
-  font-weight: 800;
-  margin-bottom: 10px;
-  color: rgba(10,10,10,.70);
+  font-weight: 900;
+  background: rgba(255,255,255,.75);
 }
+.pillStatus.bad{ background: rgba(200,52,52,.12); }
+.pillStatus.mid{ background: rgba(240,160,60,.12); }
+.pillStatus.good{ background: rgba(20,150,80,.10); }
+
+.pillMini{
+  border: 2px solid var(--ink);
+  padding: 6px 10px;
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  font-weight: 900;
+  background: rgba(255,255,255,.75);
+}
+
+.scoreRow{
+  display:grid;
+  grid-template-columns: 200px 1fr;
+  gap: 14px;
+  align-items:start;
+}
+@media (max-width: 520px){ .scoreRow{ grid-template-columns: 1fr; } }
+.scoreBig{
+  font-size: 64px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -.06em;
+}
+.scoreMeta{
+  border: 2px solid var(--ink);
+  background: rgba(255,255,255,.70);
+  padding: 12px;
+}
+.scoreLine{
+  display:flex;
+  justify-content:space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(11,11,15,.14);
+  font-size: 13px;
+}
+.scoreLine:last-child{ border-bottom: none; }
+.scoreLine span{ color: var(--muted); }
+
+.miniLink{
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--ink);
+  display:inline-flex;
+  gap: 8px;
+  align-items:center;
+  font-weight: 900;
+}
+.miniLink:hover{ text-decoration: underline; }
+
+.hr{ height: 1px; background: rgba(11,11,15,.18); margin: 12px 0; }
+
 .plan{ display:flex; flex-direction:column; gap: 10px; }
 .planItem{
   border: 2px solid var(--ink);
   background: rgba(255,255,255,.72);
   padding: 12px;
   display:grid;
-  grid-template-columns: 46px 1fr;
+  grid-template-columns: 56px 1fr;
   gap: 12px;
   align-items:start;
 }
 .planIdx{
   border: 2px solid var(--ink);
-  width: 46px;
-  height: 34px;
+  width: 56px;
+  height: 44px;
   display:flex;
   align-items:center;
   justify-content:center;
-  font-weight: 800;
+  font-weight: 900;
+  background: rgba(255,255,255,.75);
 }
-.planText{ font-size: 12px; line-height: 1.6; color: var(--ink); }
+.planHead{ font-weight: 900; letter-spacing: .12em; text-transform: uppercase; font-size: 11px; margin-bottom: 6px; color: var(--muted); }
+
+.inner{ margin-top: 10px; }
 
 .bars{ display:flex; flex-direction:column; gap: 12px; }
-.barRow{ display:flex; flex-direction:column; gap: 8px; }
-.barLeft{ display:flex; align-items:center; justify-content:space-between; gap: 10px; }
-.barName{ font-size: 12px; letter-spacing: .14em; font-weight: 800; }
+.barRow{ border: 2px solid var(--ink); background: rgba(255,255,255,.75); padding: 12px; }
+.barHead{ display:flex; justify-content:space-between; align-items:center; gap: 10px; }
+.barName{ font-weight: 900; letter-spacing: .06em; }
 .tag{
-  font-size: 9px;
+  border: 2px solid var(--ink);
+  padding: 6px 10px;
+  font-size: 10px;
   letter-spacing: .22em;
   text-transform: uppercase;
-  font-weight: 800;
-  color: rgba(10,10,10,.45);
+  font-weight: 900;
+  background: rgba(255,255,255,.75);
 }
-.tagHard{
-  color: var(--bg);
-  background: var(--ink);
-  padding: 4px 8px;
+.tagPrimary{ background: rgba(200,52,52,.10); }
+.tag.bad{ background: rgba(200,52,52,.12); }
+.tag.mid{ background: rgba(240,160,60,.12); }
+.tag.good{ background: rgba(20,150,80,.10); }
+
+.barTrack{
+  margin-top: 10px;
   border: 2px solid var(--ink);
+  height: 16px;
+  position: relative;
+  background: rgba(255,255,255,.78);
 }
-.tagWarn{
-  color: var(--ink);
-  background: rgba(10,10,10,.06);
-  padding: 4px 8px;
-  border: 2px solid rgba(10,10,10,.25);
-}
-.barWrap{
-  position:relative;
-  border: 2px solid var(--ink);
-  height: 26px;
-  background: rgba(255,255,255,.92);
-  overflow:hidden;
-}
-.barIn{
-  height:100%;
+.barFill{
+  height: 100%;
   background: var(--ink);
-  transition: width .45s cubic-bezier(.4,0,.2,1);
+  width: 0%;
 }
-.barPct{
+.barVal{
   position:absolute;
-  right: 10px;
+  right: 8px;
   top: 50%;
   transform: translateY(-50%);
   font-size: 12px;
+  color: rgba(255,255,255,.92);
   font-weight: 900;
-  color: var(--bg);
   mix-blend-mode: difference;
 }
 
-.commit{
-  display:flex;
-  flex-direction:column;
-  gap: 10px;
-  margin-top: 12px;
-}
-.linkBtn{
-  border: 2px solid rgba(10,10,10,.35);
-  background: rgba(255,255,255,.92);
+.whyBox{
+  border: 2px solid var(--ink);
+  background: rgba(255,255,255,.72);
   padding: 12px;
+}
+.whyTitle{
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.whyList{
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+}
+.whyList li{ margin: 8px 0; line-height: 1.5; }
+
+.scoreLineBig{
   display:flex;
-  align-items:center;
   justify-content:space-between;
   gap: 12px;
-  cursor:pointer;
-  text-align:left;
-  font-family: 'Sometype Mono', ui-monospace, monospace;
-  transition: transform .18s cubic-bezier(.4,0,.2,1);
-}
-.linkBtn:hover{ transform: translateY(-2px); border-color: var(--ink); }
-.linkBtn span{ flex:1; font-size: 13px; font-weight: 800; }
-
-.exportBox{
   border: 2px solid var(--ink);
-  background: rgba(255,255,255,.92);
   padding: 12px;
-  max-height: 360px;
-  overflow:auto;
+  background: rgba(255,255,255,.72);
 }
-.exportPre{
-  white-space: pre-wrap;
-  font-size: 12px;
-  line-height: 1.6;
-}
-` as const;
+.kv{ display:flex; flex-direction:column; gap: 6px; }
+.kvStrong{ font-weight: 900; letter-spacing: .04em; }
+` .trim();
